@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"syscall"
+
+	"github.com/mattetti/cocoa/darwin"
 )
 
 /*
@@ -46,17 +48,17 @@ func Bookmark(src, dst string) error {
 	// fmt.Println(string(mntB))
 	buf := make([]byte, 308)
 	// attrs, err := GetAttrList(".", AttrList{CommonAttr: ATTR_CMN_FULLPATH}, buf, 0)
-	attrs, err := GetAttrList(string(volPath),
-		AttrListMask{
-			CommonAttr: ATTR_CMN_CRTIME,
-			VolAttr:    ATTR_VOL_SIZE | ATTR_VOL_NAME | ATTR_VOL_UUID,
+	attrs, err := darwin.GetAttrList(string(volPath),
+		darwin.AttrListMask{
+			CommonAttr: darwin.ATTR_CMN_CRTIME,
+			VolAttr:    darwin.ATTR_VOL_SIZE | darwin.ATTR_VOL_NAME | darwin.ATTR_VOL_UUID,
 		},
-		buf,
-		0)
+		buf, 0|darwin.FSOPT_REPORT_FULLSIZE)
 	if err != nil {
 		fmt.Println(fmt.Errorf("failed to retrieve attribute list - %s", err))
 	}
 	fmt.Printf("%+v\n", attrs)
+	fmt.Println("Volume UUID", attrs.StringVolUUID())
 
 	// attributes
 	return nil
