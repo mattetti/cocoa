@@ -1,3 +1,5 @@
+// daring is a package implementing low level features exposed in Cocoa but that
+// can also be used via syscalls.
 package darwin
 
 import (
@@ -12,114 +14,19 @@ import (
 )
 
 const (
-	attrBitMapCount = 5
-
-	// FSOPT_NOFOLLOW If this bit is set, getattrlist() will not follow a
-	// symlink if it occurs as the last component of path.
-	FSOPT_NOFOLLOW      uint32 = 0x00000001
-	FSOPT_NOINMEMUPDATE uint32 = 0x00000002
-	// FSOPT_REPORT_FULLSIZE: The size of the attributes reported (in the first
-	// u_int32_t field in the attribute buffer) will be the size needed to hold
-	// all the requested attributes; if not set, only the attributes actu- ally
-	// returned will be reported.  This allows the caller to determine if any
-	// truncation occurred.
-	FSOPT_REPORT_FULLSIZE uint32 = 0x00000004
-	// FSOPT_PACK_INVAL_ATTRS: If this is bit is set, then all requested
-	// attributes, even ones that are not supported by the object or file
-	// system, will be returned. Default values will be used for the invalid
-	// ones. Requires that ATTR_CMN_RETURNED_ATTRS be requested.
-	FSOPT_PACK_INVAL_ATTRS uint32 = 0x00000008
-	// FSOPT_ATTR_CMN_EXTENDED: If this is bit is set, then ATTR_CMN_GEN_COUNT
-	// and ATTR_CMN_DOCUMENT_ID can be requested. When this option is used,
-	// callers must not reference forkattrs anywhere.
-	FSOPT_ATTR_CMN_EXTENDED uint32 = 0x00000020
-
-	ATTR_CMN_NAME              uint32 = 0x00000001
-	ATTR_CMN_DEVID             uint32 = 0x00000002
-	ATTR_CMN_FSID              uint32 = 0x00000004
-	ATTR_CMN_OBJTYPE           uint32 = 0x00000008
-	ATTR_CMN_OBJTAG            uint32 = 0x00000010
-	ATTR_CMN_OBJID             uint32 = 0x00000020
-	ATTR_CMN_OBJPERMANENTID    uint32 = 0x00000040
-	ATTR_CMN_PAROBJID          uint32 = 0x00000080
-	ATTR_CMN_SCRIPT            uint32 = 0x00000100
-	ATTR_CMN_CRTIME            uint32 = 0x00000200
-	ATTR_CMN_MODTIME           uint32 = 0x00000400
-	ATTR_CMN_CHGTIME           uint32 = 0x00000800
-	ATTR_CMN_ACCTIME           uint32 = 0x00001000
-	ATTR_CMN_BKUPTIME          uint32 = 0x00002000
-	ATTR_CMN_FNDRINFO          uint32 = 0x00004000
-	ATTR_CMN_OWNERID           uint32 = 0x00008000
-	ATTR_CMN_GRPID             uint32 = 0x00010000
-	ATTR_CMN_ACCESSMASK        uint32 = 0x00020000
-	ATTR_CMN_FLAGS             uint32 = 0x00040000
-	ATTR_CMN_USERACCESS        uint32 = 0x00200000
-	ATTR_CMN_EXTENDED_SECURITY uint32 = 0x00400000
-	ATTR_CMN_UUID              uint32 = 0x00800000
-	ATTR_CMN_GRPUUID           uint32 = 0x01000000
-	ATTR_CMN_FILEID            uint32 = 0x02000000
-	ATTR_CMN_PARENTID          uint32 = 0x04000000
-	ATTR_CMN_FULLPATH          uint32 = 0x08000000
-	ATTR_CMN_ADDEDTIME         uint32 = 0x10000000
-	ATTR_CMN_RETURNED_ATTRS    uint32 = 0x80000000
-	ATTR_CMN_ALL_ATTRS         uint32 = 0x9fe7ffff
-
-	ATTR_VOL_FSTYPE          uint32 = 0x00000001
-	ATTR_VOL_SIGNATURE       uint32 = 0x00000002
-	ATTR_VOL_SIZE            uint32 = 0x00000004
-	ATTR_VOL_SPACEFREE       uint32 = 0x00000008
-	ATTR_VOL_SPACEAVAIL      uint32 = 0x00000010
-	ATTR_VOL_MINALLOCATION   uint32 = 0x00000020
-	ATTR_VOL_ALLOCATIONCLUMP uint32 = 0x00000040
-	ATTR_VOL_IOBLOCKSIZE     uint32 = 0x00000080
-	ATTR_VOL_OBJCOUNT        uint32 = 0x00000100
-	ATTR_VOL_FILECOUNT       uint32 = 0x00000200
-	ATTR_VOL_DIRCOUNT        uint32 = 0x00000400
-	ATTR_VOL_MAXOBJCOUNT     uint32 = 0x00000800
-	ATTR_VOL_MOUNTPOINT      uint32 = 0x00001000
-	ATTR_VOL_NAME            uint32 = 0x00002000
-	ATTR_VOL_MOUNTFLAGS      uint32 = 0x00004000
-	ATTR_VOL_MOUNTEDDEVICE   uint32 = 0x00008000
-	ATTR_VOL_ENCODINGSUSED   uint32 = 0x00010000
-	ATTR_VOL_CAPABILITIES    uint32 = 0x00020000
-	ATTR_VOL_UUID            uint32 = 0x00040000
-	ATTR_VOL_ATTRIBUTES      uint32 = 0x40000000
-	ATTR_VOL_INFO            uint32 = 0x80000000
-	ATTR_VOL_ALL_ATTRS       uint32 = 0xc007ffff
-
-	ATTR_DIR_LINKCOUNT     uint32 = 0x00000001
-	ATTR_DIR_ENTRYCOUNT    uint32 = 0x00000002
-	ATTR_DIR_MOUNTSTATUS   uint32 = 0x00000004
-	DIR_MNTSTATUS_MNTPOINT uint32 = 0x00000001
-	DIR_MNTSTATUS_TRIGGER  uint32 = 0x00000002
-	ATTR_DIR_ALL_ATTRS     uint32 = 0x00000007
-
-	ATTR_FILE_LINKCOUNT     uint32 = 0x00000001
-	ATTR_FILE_TOTALSIZE     uint32 = 0x00000002
-	ATTR_FILE_ALLOCSIZE     uint32 = 0x00000004
-	ATTR_FILE_IOBLOCKSIZE   uint32 = 0x00000008
-	ATTR_FILE_DEVTYPE       uint32 = 0x00000020
-	ATTR_FILE_DATALENGTH    uint32 = 0x00000200
-	ATTR_FILE_DATAALLOCSIZE uint32 = 0x00000400
-	ATTR_FILE_RSRCLENGTH    uint32 = 0x00001000
-	ATTR_FILE_RSRCALLOCSIZE uint32 = 0x00002000
-
-	ATTR_FILE_ALL_ATTRS = uint32(0x0000362f)
-
-	ATTR_FORK_TOTALSIZE = uint32(0x00000001)
-	ATTR_FORK_ALLOCSIZE = uint32(0x00000002)
-	ATTR_FORK_ALL_ATTRS = uint32(0x00000003)
-
-	dash byte = '-'
+	attrBitMapCount      = 5
+	dash            byte = '-'
 )
 
 type AttrList struct {
 	Name               string
+	FileID             uint64
 	ReturnedAttributes *AttrSet
 	CreationTime       *TimeSpec
 	VolName            string
 	VolSize            int64
 	VolUUID            [16]byte
+	ObjType            uint32
 }
 
 // StringVolUUID returns a string formatted version of the volume UUID
@@ -153,7 +60,7 @@ type AttrListMask struct {
 	// fork attribute group. A bit set that specifies the fork attributes that
 	// you require.  Fork attributes relate to the actual data in the file,
 	// which can be held in multiple named contiguous ranges, or forks.
-	Forkattr uint32
+	ForkAttr uint32
 }
 
 type AttrSet struct {
@@ -186,8 +93,9 @@ func (ts TimeSpec) String() string {
 //
 // https://developer.apple.com/legacy/library/documentation/Darwin/Reference/ManPages/man2/getattrlist.2.html
 func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32) (results *AttrList, err error) {
+	results = &AttrList{}
 	if len(attrBuf) < 4 {
-		return nil, errors.New("attrBuf too small")
+		return results, errors.New("attrBuf too small")
 	}
 	mask.bitmapCount = attrBitMapCount
 
@@ -199,7 +107,7 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 	var _p0 *byte
 	_p0, err = syscall.BytePtrFromString(path)
 	if err != nil {
-		return nil, err
+		return results, err
 	}
 	_, _, e1 := syscall.Syscall6(
 		syscall.SYS_GETATTRLIST,
@@ -211,9 +119,8 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 		0,
 	)
 	if e1 != 0 {
-		return nil, e1
+		return results, e1
 	}
-	results = &AttrList{}
 
 	// binary.LittleEndian.Uint32(attrBuf)
 	size := *(*uint32)(unsafe.Pointer(&attrBuf[0]))
@@ -228,95 +135,113 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 	r := bytes.NewReader(dat)
 	pos := func() int64 { return r.Size() - int64(r.Len()) }
 
-	// fmt.Println(hex.Dump(dat))
-
 	if mask.CommonAttr&ATTR_CMN_RETURNED_ATTRS > 0 {
-		fmt.Println("ATTR_CMN_RETURNED_ATTRS")
+		fmt.Println("ATTR_CMN_RETURNED_ATTRS not supported yet", pos())
 	}
 
 	if mask.CommonAttr&ATTR_CMN_NAME > 0 {
-		fmt.Println("ATTR_CMN_NAME")
+		fmt.Println("ATTR_CMN_NAME not supported yet", pos())
 	}
 
 	if mask.CommonAttr&ATTR_CMN_DEVID > 0 {
-		fmt.Println("ATTR_CMN_DEVID")
+		fmt.Println("ATTR_CMN_DEVID not supported yet", pos())
 	}
 
 	if mask.CommonAttr&ATTR_CMN_FSID > 0 {
-		fmt.Println("ATTR_CMN_FSID")
+		fmt.Println("ATTR_CMN_FSID not supported yet", pos())
 	}
 
 	if mask.CommonAttr&ATTR_CMN_OBJTYPE > 0 {
-		fmt.Println("TTR_CMN_OBJTYPE")
+		if err = binary.Read(r, binary.LittleEndian, &results.ObjType); err != nil {
+			return results, fmt.Errorf("failed to read the object type - %s", err)
+		}
 	}
 
-	if mask.CommonAttr&ATTR_CMN_OBJTYPE > 0 {
-		fmt.Println("ATTR_CMN_OBJTYPE")
-	}
 	if mask.CommonAttr&ATTR_CMN_OBJTAG > 0 {
-		fmt.Println("ATTR_CMN_OBJTAG")
+		fmt.Println("ATTR_CMN_OBJTAG not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_OBJID > 0 {
-		fmt.Println("ATTR_CMN_OBJID")
+		fmt.Println("ATTR_CMN_OBJID not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_OBJPERMANENTID > 0 {
-		fmt.Println("ATTR_CMN_OBJPERMANENTID")
+		fmt.Println("ATTR_CMN_OBJPERMANENTID not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_PAROBJID > 0 {
-		fmt.Println("ATTR_CMN_PAROBJID")
+		fmt.Println("ATTR_CMN_PAROBJID not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_SCRIPT > 0 {
-		fmt.Println("ATTR_CMN_SCRIPT")
+		fmt.Println("ATTR_CMN_SCRIPT not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_CRTIME > 0 {
 		results.CreationTime = &TimeSpec{}
 		if err = binary.Read(r, binary.LittleEndian, &results.CreationTime.Sec); err != nil {
-			return nil, fmt.Errorf("failed reading TTR_CMN_CRTIME sec - %s", err)
+			return results, fmt.Errorf("failed reading TTR_CMN_CRTIME sec - %s", err)
 		}
 		if err = binary.Read(r, binary.LittleEndian, &results.CreationTime.Nsec); err != nil {
-			return nil, fmt.Errorf("failed reading TTR_CMN_CRTIME nsec - %s", err)
+			return results, fmt.Errorf("failed reading TTR_CMN_CRTIME nsec - %s", err)
 		}
 	}
 	if mask.CommonAttr&ATTR_CMN_MODTIME > 0 {
-		fmt.Println("ATTR_CMN_MODTIME")
+		fmt.Println("ATTR_CMN_MODTIME not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_CHGTIME > 0 {
-		fmt.Println("ATTR_CMN_CHGTIME")
+		fmt.Println("ATTR_CMN_CHGTIME not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_ACCTIME > 0 {
-		fmt.Println("ATTR_CMN_ACCTIME")
+		fmt.Println("ATTR_CMN_ACCTIME not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_BKUPTIME > 0 {
-		fmt.Println("ATTR_CMN_BKUPTIME")
+		fmt.Println("ATTR_CMN_BKUPTIME not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_FNDRINFO > 0 {
-		fmt.Println("ATTR_CMN_FNDRINFO")
+		fmt.Println("ATTR_CMN_FNDRINFO not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_OWNERID > 0 {
-		fmt.Println("ATTR_CMN_OWNERID")
+		fmt.Println("ATTR_CMN_OWNERID not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_GRPID > 0 {
-		fmt.Println("ATTR_CMN_GRPID")
+		fmt.Println("ATTR_CMN_GRPID not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_ACCESSMASK > 0 {
-		fmt.Println("ATTR_CMN_ACCESSMASK")
+		fmt.Println("ATTR_CMN_ACCESSMASK not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_FLAGS > 0 {
-		fmt.Println("ATTR_CMN_FLAGS")
+		fmt.Println("ATTR_CMN_FLAGS not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_USERACCESS > 0 {
-		fmt.Println("ATTR_CMN_USERACCESS")
+		fmt.Println("ATTR_CMN_USERACCESS not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_EXTENDED_SECURITY > 0 {
-		fmt.Println("ATTR_CMN_EXTENDED_SECURITY")
+		fmt.Println("ATTR_CMN_EXTENDED_SECURITY not supported yet", pos())
+	}
+	if mask.CommonAttr&ATTR_CMN_UUID > 0 {
+		fmt.Println("ATTR_CMN_UUID not supported yet", pos())
+	}
+	if mask.CommonAttr&ATTR_CMN_GRPUUID > 0 {
+		fmt.Println("ATTR_CMN_GRPUUID not supported yet", pos())
+	}
+	if mask.CommonAttr&ATTR_CMN_FILEID > 0 {
+		if err = binary.Read(r, binary.LittleEndian, &results.FileID); err != nil {
+			return results, fmt.Errorf("failed to read file ID - %s", err)
+		}
+
+	}
+	if mask.CommonAttr&ATTR_CMN_PARENTID > 0 {
+		fmt.Println("ATTR_CMN_PARENTID not supported yet", pos())
+	}
+	if mask.CommonAttr&ATTR_CMN_FULLPATH > 0 {
+		fmt.Println("ATTR_CMN_FULLPATH not supported yet", pos())
+	}
+	if mask.CommonAttr&ATTR_CMN_ADDEDTIME > 0 {
+		fmt.Println("ATTR_CMN_ADDEDTIME not supported yet", pos())
 	}
 
 	// Volume attributes
 	if mask.VolAttr&ATTR_VOL_FSTYPE > 0 {
-		fmt.Println("ATTR_VOL_FSTYPE")
+		fmt.Println("ATTR_VOL_FSTYPE not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_SIGNATURE > 0 {
-		fmt.Println("ATTR_VOL_SIGNATURE")
+		fmt.Println("ATTR_VOL_SIGNATURE not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_SIZE > 0 {
 		if err = binary.Read(r, binary.LittleEndian, &results.VolSize); err != nil {
@@ -324,34 +249,34 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 		}
 	}
 	if mask.VolAttr&ATTR_VOL_SPACEFREE > 0 {
-		fmt.Println("ATTR_VOL_SPACEFREE")
+		fmt.Println("ATTR_VOL_SPACEFREE not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_SPACEAVAIL > 0 {
-		fmt.Println("ATTR_VOL_SPACEAVAIL")
+		fmt.Println("ATTR_VOL_SPACEAVAIL not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_MINALLOCATION > 0 {
-		fmt.Println("ATTR_VOL_MINALLOCATION")
+		fmt.Println("ATTR_VOL_MINALLOCATION not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_ALLOCATIONCLUMP > 0 {
-		fmt.Println("ATTR_VOL_ALLOCATIONCLUMP")
+		fmt.Println("ATTR_VOL_ALLOCATIONCLUMP not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_IOBLOCKSIZE > 0 {
-		fmt.Println("ATTR_VOL_IOBLOCKSIZE")
+		fmt.Println("ATTR_VOL_IOBLOCKSIZE not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_OBJCOUNT > 0 {
-		fmt.Println("ATTR_VOL_OBJCOUNT")
+		fmt.Println("ATTR_VOL_OBJCOUNT not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_FILECOUNT > 0 {
-		fmt.Println("ATTR_VOL_FILECOUNT")
+		fmt.Println("ATTR_VOL_FILECOUNT not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_DIRCOUNT > 0 {
-		fmt.Println("ATTR_VOL_DIRCOUNT")
+		fmt.Println("ATTR_VOL_DIRCOUNT not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_MAXOBJCOUNT > 0 {
-		fmt.Println("ATTR_VOL_MAXOBJCOUNT")
+		fmt.Println("ATTR_VOL_MAXOBJCOUNT not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_MOUNTPOINT > 0 {
-		fmt.Println("ATTR_VOL_MOUNTPOINT")
+		fmt.Println("ATTR_VOL_MOUNTPOINT not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_NAME > 0 {
 		ref := AttrRef{}
@@ -376,16 +301,16 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 
 	}
 	if mask.VolAttr&ATTR_VOL_MOUNTFLAGS > 0 {
-		fmt.Println("ATTR_VOL_MOUNTFLAGS")
+		fmt.Println("ATTR_VOL_MOUNTFLAGS not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_MOUNTEDDEVICE > 0 {
-		fmt.Println("ATTR_VOL_MOUNTEDDEVICE")
+		fmt.Println("ATTR_VOL_MOUNTEDDEVICE not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_ENCODINGSUSED > 0 {
-		fmt.Println("ATTR_VOL_ENCODINGSUSED")
+		fmt.Println("ATTR_VOL_ENCODINGSUSED not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_CAPABILITIES > 0 {
-		fmt.Println("ATTR_VOL_CAPABILITIES")
+		fmt.Println("ATTR_VOL_CAPABILITIES not supported yet", pos())
 	}
 	if mask.VolAttr&ATTR_VOL_UUID > 0 {
 		if err = binary.Read(r, binary.LittleEndian, &results.VolUUID); err != nil {
@@ -393,7 +318,70 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 		}
 	}
 	if mask.VolAttr&ATTR_VOL_ATTRIBUTES > 0 {
-		fmt.Println("ATTR_VOL_ATTRIBUTES")
+		fmt.Println("ATTR_VOL_ATTRIBUTES not supported yet", pos())
+	}
+
+	// Directory
+	if mask.DirAttr&ATTR_DIR_LINKCOUNT > 0 {
+		fmt.Println("ATTR_DIR_LINKCOUNT not supported yet", pos())
+	}
+	if mask.DirAttr&ATTR_DIR_ENTRYCOUNT > 0 {
+		fmt.Println("ATTR_DIR_ENTRYCOUNT not supported yet", pos())
+	}
+	if mask.DirAttr&ATTR_DIR_MOUNTSTATUS > 0 {
+		fmt.Println("ATTR_DIR_MOUNTSTATUS not supported yet", pos())
+	}
+
+	// File
+	if mask.FileAttr&ATTR_FILE_LINKCOUNT > 0 {
+		fmt.Println("ATTR_FILE_LINKCOUNT not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_TOTALSIZE > 0 {
+		fmt.Println("ATTR_FILE_TOTALSIZE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_ALLOCSIZE > 0 {
+		fmt.Println("ATTR_FILE_ALLOCSIZE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_IOBLOCKSIZE > 0 {
+		fmt.Println("ATTR_FILE_IOBLOCKSIZE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_CLUMPSIZE > 0 {
+		fmt.Println("ATTR_FILE_CLUMPSIZE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_DEVTYPE > 0 {
+		fmt.Println("ATTR_FILE_DEVTYPE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_FILETYPE > 0 {
+		fmt.Println("ATTR_FILE_FILETYPE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_FORKCOUNT > 0 {
+		fmt.Println("ATTR_FILE_FORKCOUNT not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_DATALENGTH > 0 {
+		fmt.Println("ATTR_FILE_DATALENGTH not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_DATAALLOCSIZE > 0 {
+		fmt.Println("ATTR_FILE_DATAALLOCSIZE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_DATAEXTENTS > 0 {
+		fmt.Println("ATTR_FILE_DATAEXTENTS not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_RSRCLENGTH > 0 {
+		fmt.Println("ATTR_FILE_RSRCLENGTH not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_RSRCALLOCSIZE > 0 {
+		fmt.Println("ATTR_FILE_RSRCALLOCSIZE not supported yet", pos())
+	}
+	if mask.FileAttr&ATTR_FILE_RSRCEXTENTS > 0 {
+		fmt.Println("ATTR_FILE_RSRCEXTENTS not supported yet", pos())
+	}
+
+	// fork
+	if mask.ForkAttr&ATTR_FORK_TOTALSIZE > 0 {
+		fmt.Println("ATTR_FORK_TOTALSIZE not supported yet", pos())
+	}
+	if mask.ForkAttr&ATTR_FORK_ALLOCSIZE > 0 {
+		fmt.Println("ATTR_FORK_ALLOCSIZE not supported yet", pos())
 	}
 
 	return
