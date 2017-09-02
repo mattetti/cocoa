@@ -10,12 +10,17 @@ import (
 	"fmt"
 	"io"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 const (
 	attrBitMapCount      = 5
 	dash            byte = '-'
+)
+
+var (
+	darwinEpoch = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
 type AttrList struct {
@@ -83,6 +88,15 @@ type TimeSpec struct {
 
 func (ts TimeSpec) String() string {
 	return fmt.Sprintf("Sec: %d, Nsec: %d", ts.Sec, ts.Nsec)
+}
+
+// Time returns a unix time representation of the time spec
+func (ts TimeSpec) Time() time.Time {
+	return time.Unix(ts.Sec, ts.Nsec)
+}
+
+func (ts TimeSpec) DarwinDuration() time.Duration {
+	return ts.Time().Sub(darwinEpoch)
 }
 
 // GetAttrList returns attributes (that is, metadata) of file system objects. GetAttrList()

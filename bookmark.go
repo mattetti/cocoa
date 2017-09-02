@@ -230,6 +230,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		binary.Write(buf, binary.LittleEndian, sliceOffset+uint32(sBuf.Len()))
 		sBuf.Write(data)
 	}
+
 	// write the data
 	buf.Write(sBuf.Bytes())
 
@@ -238,6 +239,15 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	buf.Write(b.FileProperties)
 
 	// KBookmarkFileCreationDate = 0x1040
+	oMap[darwin.KBookmarkFileCreationDate] = buf.Len()
+	// length of data
+	binary.Write(buf, binary.LittleEndian, uint32(8))
+	// type
+	binary.Write(buf, binary.LittleEndian, uint32(bmk_date|bmk_st_zero))
+	// data
+	fmt.Println(b.FileCreationDate.DarwinDuration().Seconds())
+	// timestamp
+	binary.Write(buf, binary.BigEndian, float64(b.FileCreationDate.DarwinDuration().Seconds()))
 
 	// KBookmarkVolumePath = 0x2002
 	// KBookmarkVolumeURL = 0x2005
@@ -275,7 +285,6 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	toc := oMap.Bytes()
 
 	// total size minus the header
-	// FIXME
 	binary.Write(hbuf, binary.LittleEndian, 4+uint32(buf.Len()+len(toc)))
 	// magic
 	hbuf.Write([]byte{0x00, 0x00, 0x04, 0x10, 0x0, 0x0, 0x0, 0x0})
@@ -334,5 +343,11 @@ func encodedStringItem(str string) []byte {
 	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint32(buf, uint32(len(str)))
 	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_string|bmk_st_one))
-	return append(buf, []byte(str)...)
+	buf = append(buf, []byte(str)...)
+	// pad if needed
+	if diff := len(buf) & 3; diff > 0 {
+		buf = append(buf, make([]byte, 4-diff)...)
+	}
+
+	return buf
 }
