@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"syscall"
 	"time"
 	"unsafe"
@@ -97,6 +98,21 @@ func (ts TimeSpec) Time() time.Time {
 
 func (ts TimeSpec) DarwinDuration() time.Duration {
 	return ts.Time().Sub(darwinEpoch)
+}
+
+// SetAlias flag the destination file as an alias/bookmark. Don't use on the wrong file!
+func SetAlias(path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("%s can't be converted to an absolute path - %s", path, err)
+	}
+	aliasMagicFlag := []byte{0x61, 0x6c, 0x69, 0x73, 0x4d, 0x41, 0x43, 0x53, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	var dataval *byte = nil
+	datalen := len(aliasMagicFlag)
+	if datalen > 0 {
+		dataval = &aliasMagicFlag[0]
+	}
+	return setxattr(filepath.Clean(absPath), "com.apple.FinderInfo", dataval, datalen, 0, 0)
 }
 
 // GetAttrList returns attributes (that is, metadata) of file system objects. GetAttrList()
@@ -414,4 +430,11 @@ func toUUIDString(uuid [16]byte) string {
 	hex.Encode(buf[24:], uuid[10:])
 
 	return string(buf)
+}
+
+func setxattr(path string, name string, value *byte, size int, pos int, options int) error {
+	if _, _, e1 := syscall.Syscall6(syscall.SYS_SETXATTR, uintptr(unsafe.Pointer(syscall.StringBytePtr(path))), uintptr(unsafe.Pointer(syscall.StringBytePtr(name))), uintptr(unsafe.Pointer(value)), uintptr(size), uintptr(pos), uintptr(options)); e1 != syscall.Errno(0) {
+		return e1
+	}
+	return nil
 }

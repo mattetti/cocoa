@@ -12,7 +12,6 @@ import (
 	"syscall"
 
 	"github.com/mattetti/cocoa/darwin"
-	"github.com/pkg/xattr"
 )
 
 /*
@@ -28,6 +27,11 @@ import (
 	is the best summary I found:
 	https://github.com/al45tair/mac_alias/blob/master/doc/bookmark_fmt.rst
 	(documentation copied in doc/* in case the original repo disappears)
+	Note that the documentation is incorrect and you should refer to the
+	code to see the small differences.
+
+	Another important point is that to become an alias/bookmark the
+	generated binary file must have a special finder extended attribute flag set.
 */
 
 const (
@@ -179,13 +183,9 @@ func Bookmark(src, dst string) error {
 
 	bookmark.Write(w)
 	w.Close()
+	// turn the file into an actual alias by setting the finder flags
+	darwin.SetAlias(dst)
 
-	// set the file as an alias
-	payload := make([]byte, 32)
-	for i, b := range []byte{0x61, 0x6c, 0x69, 0x73, 0x4d, 0x41, 0x43, 0x53, 0x80} {
-		payload[i] = b
-	}
-	err = xattr.Set(filepath.Clean(dst), "com.apple.FinderInfo", payload)
 	return err
 }
 
