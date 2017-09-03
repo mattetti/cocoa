@@ -69,6 +69,23 @@ const (
 	KCFURLVolumeSupportsDecmpFSCompression = 0x800000000000000
 	KCFURLVolumeHas64BitObjectIDs          = 0x1000000000000000
 	KCFURLVolumePropertyFlagsAll           = 0xffffffffffffffff
+
+	KCFNumberSInt8Type     = 1
+	KCFNumberSInt16Type    = 2
+	KCFNumberSInt32Type    = 3
+	KCFNumberSInt64Type    = 4
+	KCFNumberFloat32Type   = 5
+	KCFNumberFloat64Type   = 6
+	KCFNumberCharType      = 7
+	KCFNumberShortType     = 8
+	KCFNumberIntType       = 9
+	KCFNumberLongType      = 10
+	KCFNumberLongLongType  = 11
+	KCFNumberFloatType     = 12
+	KCFNumberDoubleType    = 13
+	KCFNumberCFIndexType   = 14
+	KCFNumberNSIntegerType = 15
+	KCFNumberCGFloatType   = 16
 )
 
 const (
@@ -82,9 +99,9 @@ const (
 	KBookmarkFileName         = 0x1020
 	KBookmarkFileID           = 0x1030
 	KBookmarkFileCreationDate = 0x1040
-	//                           = 0x1054   // ?
-	//                           = 0x1055   // ?
-	//                           = 0x1056   // ?
+	KBookmarkUnknown          = 0x1054 // always 1?
+	KBookmarkUnknown1         = 0x1055 // point to value in 0x1054
+	KBookmarkUnknown2         = 0x1056 // boolean, always true?
 
 	//                           = 0x1101   // ?
 	//                           = 0x1102   // ?
@@ -106,7 +123,7 @@ const (
 	KBookmarkWasFileReference = 0xd001 // True if the URL was a file reference
 	KBookmarkCreationOptions  = 0xd010
 	KBookmarkURLLengths       = 0xe003 // See below
-	//                           = 0xf017   // Localized name?
+	KBookmarkFullFileName     = 0xf017
 	//                           = 0xf022
 	KBookmarkSecurityExtension = 0xf080
 	//                           = 0xf081

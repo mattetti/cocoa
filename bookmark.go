@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/mattetti/cocoa/darwin"
+	"github.com/pkg/xattr"
 )
 
 /*
@@ -49,6 +50,9 @@ const (
 
 	bmk_boolean_st_false = 0x0000
 	bmk_boolean_st_true  = 0x0001
+
+	bmk_url_st_absolute = 0x0001
+	bmk_url_st_relative = 0x0002
 )
 
 // Bookmark acts like os.Symlink but instead of creating a symlink, a bookmark is stored.
@@ -121,23 +125,26 @@ func Bookmark(src, dst string) error {
 
 	// volume properties
 	bb := &bytes.Buffer{}
-	binary.Write(bb, binary.LittleEndian, 0x81|darwin.KCFURLVolumeSupportsPersistentIDs)
-	binary.Write(bb, binary.LittleEndian, 0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs)
-	bookmark.VolumeProperties = append(bb.Bytes(), 0)
+	binary.Write(bb, binary.LittleEndian, uint64(0x81|darwin.KCFURLVolumeSupportsPersistentIDs))
+	binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
+	binary.Write(bb, binary.LittleEndian, uint64(0))
+	bookmark.VolumeProperties = bb.Bytes()
 
 	// file properties
-	bb = &bytes.Buffer{}
+	bb.Reset()
 	switch fileAttrs.ObjType {
 	case darwin.VREG:
-		binary.Write(bb, binary.LittleEndian, darwin.KCFURLResourceIsRegularFile)
+		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
 	case darwin.VDIR:
-		binary.Write(bb, binary.LittleEndian, darwin.KCFURLResourceIsDirectory)
+		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsDirectory))
 	case darwin.VLNK:
-		binary.Write(bb, binary.LittleEndian, darwin.KCFURLResourceIsSymbolicLink)
+		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsSymbolicLink))
 	default:
-		binary.Write(bb, binary.LittleEndian, darwin.KCFURLResourceIsRegularFile)
+		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
 	}
-	bookmark.FileProperties = append(bb.Bytes(), 0x0f, 0)
+	binary.Write(bb, binary.LittleEndian, uint64(0x0f))
+	binary.Write(bb, binary.LittleEndian, uint64(0))
+	bookmark.FileProperties = bb.Bytes()
 
 	// getting data about each node of the path
 	relPath, _ := filepath.Rel(string(volPath), srcPath)
@@ -171,19 +178,15 @@ func Bookmark(src, dst string) error {
 	bookmark.ContainingFolderIDX = uint32(len(bookmark.Path)) - 2
 
 	bookmark.Write(w)
+	w.Close()
 
-	// TODO: set attrx
-	/*
-		payload := make([]byte, 32)
-		for i, b := range []byte{0x61, 0x6c, 0x69, 0x73, 0x4d, 0x41, 0x43, 0x53, 0x80} {
-			payload[i] = b
-		}
-		err = xattr.Set("bookmark", "com.apple.FinderInfo", payload)
-		if err != nil {
-			panic(err)
-		}
-	*/
-	return nil
+	// set the file as an alias
+	payload := make([]byte, 32)
+	for i, b := range []byte{0x61, 0x6c, 0x69, 0x73, 0x4d, 0x41, 0x43, 0x53, 0x80} {
+		payload[i] = b
+	}
+	err = xattr.Set(filepath.Clean(dst), "com.apple.FinderInfo", payload)
+	return err
 }
 
 type BookmarkData struct {
@@ -209,70 +212,140 @@ type BookmarkData struct {
 // Write converts the bookmark data into binary data and writes it to the passed writer.
 // Note that the writes are buffered and written all at once.
 func (b *BookmarkData) Write(w io.Writer) error {
+	// buffer for the body
 	buf := &bytes.Buffer{}
-
-	// bodyStart := buf.Len()
+	// track the offset within the body so we can build the TOC
 	oMap := offsetMap{}
 
-	// Path
-	oMap[darwin.KBookmarkPath] = buf.Len()
-	// length of data (n items)
-	binary.Write(buf, binary.LittleEndian, uint32(len(b.Path)*4))
-	// type
-	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
-	// data
-	sliceOffset := uint32(buf.Len() + len(b.Path)*4)
-	sBuf := &bytes.Buffer{}
-	for _, item := range b.Path {
-		// offset FIX ME
-		// write the offset start offset + x paths * offset (4 bytes) + len of encoded content
-		data := encodedStringItem(item)
-		binary.Write(buf, binary.LittleEndian, sliceOffset+uint32(sBuf.Len()))
-		sBuf.Write(data)
-	}
+	oMap[darwin.KBookmarkCreationOptions] = buf.Len()
+	buf.Write(encodedUint32(1024))
 
-	// write the data
-	buf.Write(sBuf.Bytes())
+	// write each path items one by one
+	pathOffsets := make([]int, len(b.Path))
+	for i, item := range b.Path {
+		// track the starting offset of each item (append 4 for the body size value)
+		pathOffsets[i] = 4 + buf.Len()
+		// get the offset of the last item in the path
+		if i == len(b.Path)-1 {
+			oMap[darwin.KBookmarkFullFileName] = pathOffsets[i]
+		}
+		buf.Write(encodedStringItem(item))
+	}
+	padBuf(buf)
+
+	// offset to the start of path offsets
+	// the TOC will point to here so we can find how many items are in the array
+	// and access each item to rebuild the path.
+	// 0x04 0x10
+	oMap[darwin.KBookmarkPath] = buf.Len()
+	// number of items
+	binary.Write(buf, binary.LittleEndian, uint32(len(b.Path)*4))
+	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
+	// offset from after the header for each item
+	for _, offset := range pathOffsets {
+		binary.Write(buf, binary.LittleEndian, uint32(offset))
+	}
+	padBuf(buf)
+
+	// file ids for the path
+	// 0x05 0x10
+	oMap[darwin.KBookmarkCNIDPath] = buf.Len()
+	binary.Write(buf, binary.LittleEndian, uint32(len(b.CNIDPath)*4))
+	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
+	for _, cnid := range b.CNIDPath {
+		buf.Write(encodedUint32(uint32(cnid)))
+	}
+	padBuf(buf)
 
 	// file properties
+	// 0x10 0x10
 	oMap[darwin.KBookmarkFileProperties] = buf.Len()
-	buf.Write(b.FileProperties)
+	buf.Write(encodedBytes(b.FileProperties))
+	padBuf(buf)
 
-	// KBookmarkFileCreationDate = 0x1040
+	// KBookmarkFileCreationDate 0x04 0x10
 	oMap[darwin.KBookmarkFileCreationDate] = buf.Len()
-	// length of data
-	binary.Write(buf, binary.LittleEndian, uint32(8))
-	// type
-	binary.Write(buf, binary.LittleEndian, uint32(bmk_date|bmk_st_zero))
-	// data
-	fmt.Println(b.FileCreationDate.DarwinDuration().Seconds())
-	// timestamp
-	binary.Write(buf, binary.BigEndian, float64(b.FileCreationDate.DarwinDuration().Seconds()))
+	buf.Write(encodedTimeSpec(b.FileCreationDate))
+	padBuf(buf)
 
-	// KBookmarkVolumePath = 0x2002
-	// KBookmarkVolumeURL = 0x2005
-	// KBookmarkVolumeName = 0x2010
+	// 0x54 0x10 unknown but seems to always be 1
+	// 0x55 0x10 unknown, point to the same value
+	oMap[darwin.KBookmarkUnknown] = buf.Len()
+	oMap[darwin.KBookmarkUnknown1] = buf.Len()
+	buf.Write(encodedUint32(uint32(1)))
+	padBuf(buf)
 
-	// KBookmarkVolumeUUID = 0x2011
-	// KBookmarkVolumeSize = 0x2012
-	// KBookmarkVolumeCreationDate = 0x2013
-	// KBookmarkVolumeProperties = 0x2020
-	// KBookmarkVolumeIsRoot = 0x2030
+	// 0x56 0x10 bool set to true
+	oMap[darwin.KBookmarkUnknown2] = buf.Len()
+	buf.Write(encodedBool(true))
+	padBuf(buf)
 
-	// KBookmarkContainingFolder = 0xc001
-	// KBookmarkUserName = 0xc011
-	// KBookmarkUID = 0xc012
-	// KBookmarkWasFileReference = 0xd001
+	// KBookmarkVolumePath 0x02 0x20
+	oMap[darwin.KBookmarkVolumePath] = buf.Len()
+	buf.Write(encodedStringItem(b.VolumePath))
+	padBuf(buf)
 
-	// 0xd010
-	// 0xf017
+	// KBookmarkVolumeURL 0x05 0x20
+	oMap[darwin.KBookmarkVolumeURL] = buf.Len()
+	binary.Write(buf, binary.LittleEndian, uint32(len(b.VolumeURL)))
+	// only support absolute path for now
+	binary.Write(buf, binary.LittleEndian, uint32(bmk_url|bmk_url_st_absolute))
+	buf.Write([]byte(b.VolumeURL))
+	padBuf(buf)
+
+	// KBookmarkVolumeName 0x10 0x20
+	oMap[darwin.KBookmarkVolumeName] = buf.Len()
+	buf.Write(encodedStringItem(b.VolumeName))
+	padBuf(buf)
+
+	// KBookmarkVolumeUUID 0x11 0x20
+	oMap[darwin.KBookmarkVolumeUUID] = buf.Len()
+	buf.Write(encodedStringItem(b.VolumeUUID))
+	padBuf(buf)
+
+	// KBookmarkVolumeSize 0x12 0x20
+	oMap[darwin.KBookmarkVolumeSize] = buf.Len()
+	buf.Write(encodedUint64(uint64(b.VolumeSize)))
+	padBuf(buf)
+
+	// KBookmarkVolumeCreationDate 0x13 0x20
+	oMap[darwin.KBookmarkVolumeCreationDate] = buf.Len()
+	buf.Write(encodedTimeSpec(b.VolumeCreationDate))
+	padBuf(buf)
+
+	// KBookmarkVolumeProperties 0x20 0x20
+	oMap[darwin.KBookmarkVolumeProperties] = buf.Len()
+	buf.Write(encodedBytes(b.VolumeProperties))
+	padBuf(buf)
+
+	// KBookmarkVolumeIsRoot 0x30 20
+	oMap[darwin.KBookmarkVolumeIsRoot] = buf.Len()
+	buf.Write(encodedBool(b.VolumeIsRoot))
+	padBuf(buf)
+
+	// KBookmarkContainingFolder 0x01 0xc0
+	oMap[darwin.KBookmarkContainingFolder] = buf.Len()
+	buf.Write(encodedUint32(b.ContainingFolderIDX))
+	padBuf(buf)
+
+	// KBookmarkUserName 0x11 0xc0
+	oMap[darwin.KBookmarkUserName] = buf.Len()
+	buf.Write(encodedStringItem(b.UserName))
+	padBuf(buf)
+
+	// KBookmarkUID 0x12 0xc0
+	oMap[darwin.KBookmarkUID] = buf.Len()
+	buf.Write(encodedUint32(b.UID))
+	padBuf(buf)
+
+	// KBookmarkWasFileReference
+	oMap[darwin.KBookmarkWasFileReference] = buf.Len()
+	buf.Write(encodedBool(b.WasFileReference))
+	padBuf(buf)
+
 	// 0xf022
 
-	// about to write the TOC header
-	// tocHeaderPos := buf.Len()
-	// TODO overwrite the value at tocOffsetCounterPos
-
-	// header now that we have enough data
+	// buffer the header now that we have enough data
 	hbuf := bytes.NewBufferString("book")
 	hbuf.Write(make([]byte, 4))
 	hbuf.Write([]byte("mark"))
@@ -282,19 +355,23 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	// size of the header
 	binary.Write(hbuf, binary.LittleEndian, uint32(56))
 
-	toc := oMap.Bytes()
+	// convert the toc in bytes so we can calculate offsets
+	toc := oMap.Bytes(4)
 
 	// total size minus the header
 	binary.Write(hbuf, binary.LittleEndian, 4+uint32(buf.Len()+len(toc)))
 	// magic
 	hbuf.Write([]byte{0x00, 0x00, 0x04, 0x10, 0x0, 0x0, 0x0, 0x0})
-
 	// TODO: figure out those byte since they seem to set the icon
 	hbuf.Write(make([]byte, 20))
-	// offset to the TOC
+	// end of header
+
+	// offset to the TOC  (size of the body)
 	binary.Write(hbuf, binary.LittleEndian, 4+uint32(buf.Len()))
+
 	// body
 	hbuf.Write(buf.Bytes())
+
 	// toc
 	hbuf.Write(toc)
 
@@ -304,7 +381,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 
 type offsetMap map[uint32]int
 
-func (oMap offsetMap) Bytes() []byte {
+func (oMap offsetMap) Bytes(additionalOffset int) []byte {
 	buf := &bytes.Buffer{}
 
 	// Size of TOC in bytes, minus 8
@@ -318,7 +395,7 @@ func (oMap offsetMap) Bytes() []byte {
 	// Number of entries in this TOC
 	binary.Write(buf, binary.LittleEndian, uint32(len(oMap)))
 
-	// TODO: sort keys
+	// sort keys
 	keys := make([]int, len(oMap))
 	i := 0
 	for k := range oMap {
@@ -331,7 +408,7 @@ func (oMap offsetMap) Bytes() []byte {
 		// key
 		binary.Write(buf, binary.LittleEndian, uint32(k))
 		// offset
-		binary.Write(buf, binary.LittleEndian, uint32(oMap[uint32(k)]))
+		binary.Write(buf, binary.LittleEndian, uint32(oMap[uint32(k)])+4)
 		// reserved
 		binary.Write(buf, binary.LittleEndian, uint32(0))
 	}
@@ -339,15 +416,71 @@ func (oMap offsetMap) Bytes() []byte {
 	return buf.Bytes()
 }
 
+// pad if needed
+func padBuf(buf *bytes.Buffer) {
+	offset := buf.Len()
+	if diff := offset & 3; diff > 0 {
+		buf.Write(make([]byte, 4-diff))
+	}
+}
+
+func encodedBytes(b []byte) []byte {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint32(buf, uint32(len(b)))
+	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_data|bmk_st_one))
+	buf = append(buf, b...)
+	offset := len(buf)
+	if diff := offset & 3; diff > 0 {
+		buf = append(buf, make([]byte, 4-diff)...)
+	}
+	return buf
+}
+
 func encodedStringItem(str string) []byte {
 	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint32(buf, uint32(len(str)))
 	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_string|bmk_st_one))
 	buf = append(buf, []byte(str)...)
-	// pad if needed
-	if diff := len(buf) & 3; diff > 0 {
+	offset := len(buf)
+	if diff := offset & 3; diff > 0 {
 		buf = append(buf, make([]byte, 4-diff)...)
 	}
+	return buf
+}
 
+func encodedTimeSpec(ts *darwin.TimeSpec) []byte {
+	buf := &bytes.Buffer{}
+	// size
+	binary.Write(buf, binary.LittleEndian, uint32(8))
+	// type
+	binary.Write(buf, binary.LittleEndian, uint32(bmk_date|bmk_st_zero))
+	// data
+	binary.Write(buf, binary.BigEndian, float64(ts.DarwinDuration().Seconds()))
+	return buf.Bytes()
+}
+
+func encodedBool(v bool) []byte {
+	buf := make([]byte, 8)
+	if v {
+		binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_boolean|bmk_boolean_st_true))
+	} else {
+		binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_boolean|bmk_boolean_st_false))
+	}
+	return buf
+}
+
+func encodedUint32(n uint32) []byte {
+	buf := make([]byte, 12)
+	binary.LittleEndian.PutUint32(buf, uint32(4))
+	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_number|darwin.KCFNumberSInt32Type))
+	binary.LittleEndian.PutUint32(buf[8:], n)
+	return buf
+}
+
+func encodedUint64(n uint64) []byte {
+	buf := make([]byte, 16)
+	binary.LittleEndian.PutUint32(buf, uint32(8))
+	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_number|darwin.KCFNumberSInt64Type))
+	binary.LittleEndian.PutUint64(buf[8:], n)
 	return buf
 }
