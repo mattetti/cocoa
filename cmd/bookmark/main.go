@@ -29,6 +29,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cocoa.IsBookmark(*flagSrc) {
+		fmt.Println("let's not bookmark to a bookmark")
+		os.Exit(1)
+	}
 	if err := cocoa.Bookmark(*flagSrc, *flagDest); err != nil {
 		panic(err)
 	}

@@ -237,6 +237,7 @@ const (
 )
 
 const (
+	// from sys/vnode.h
 	VNON uint32 = iota
 	VREG
 	VDIR
@@ -248,4 +249,32 @@ const (
 	VBAD
 	VSTR
 	VCPLX
+)
+
+// finder flags
+// https://opensource.apple.com/source/CarbonHeaders/CarbonHeaders-9A581/Finder.h
+const (
+	FFKIsOnDesk = 0x0001 /* Files and folders (System 6) */
+	FFKColor    = 0x000E /* Files and folders */
+	/* bit 0x0020 was kRequireSwitchLaunch, but is now reserved for future use*/
+	FFKIsShared = 0x0040 /* Files only (Applications only) */
+	/* If clear, the application needs to write to */
+	/* its resource fork, and therefore cannot be */
+	/* shared on a server */
+	FFKHasNoINITs = 0x0080 /* Files only (Extensions/Control Panels only) */
+	/* This file contains no INIT resource */
+	FFKHasBeenInited = 0x0100 /* Files only */
+	/* Clear if the file contains desktop database */
+	/* resources ('BNDL', 'FREF', 'open', 'kind'...) */
+	/* that have not been added yet. Set only by the Finder */
+	/* Reserved for folders - make sure this bit is cleared for folders */
+	/* bit 0x0200 was the letter bit for AOCE, but is now reserved for future use */
+	FFKHasCustomIcon = 0x0400 /* Files and folders */
+	FFKIsStationery  = 0x0800 /* Files only */
+	FFKNameLocked    = 0x1000 /* Files and folders */
+	FFKHasBundle     = 0x2000 /* Files and folders */
+	/* Indicates that a file has a BNDL resource */
+	/* Indicates that a folder is displayed as a package */
+	FFKIsInvisible = 0x4000 /* Files and folders */
+	FFKIsAlias     = 0x8000 /* Files only */
 )

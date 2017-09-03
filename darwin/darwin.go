@@ -34,11 +34,19 @@ type AttrList struct {
 	VolSize            int64
 	VolUUID            [16]byte
 	ObjType            uint32
+	FileInfo           FileInfo
+	FolderInfo         FolderInfo
 }
 
 // StringVolUUID returns a string formatted version of the volume UUID
 func (attr *AttrList) StringVolUUID() string {
 	return toUUIDString(attr.VolUUID)
+}
+
+// IsFolder indicates if the attribute list is a folder.
+// ATTR_CMN_OBJTYPE must have been ask as a common attribute to check this flag.
+func (attr *AttrList) IsFolder() bool {
+	return attr.ObjType == VDIR
 }
 
 // AttrListMask is a structure defined in <sys/attr.h> and used by GetAttrList
@@ -83,10 +91,45 @@ type AttrRef struct {
 	Len    uint32
 }
 
-type TimeSpec struct {
-	Sec  int64
-	Nsec int64
+type Point struct {
+	X int16
+	Y int16
 }
+
+type Rect struct {
+	X int16
+	Y int16
+	W int16
+	H int16
+}
+
+// FileInfo structure (32 bytes)
+// See https://opensource.apple.com/source/CarbonHeaders/CarbonHeaders-9A581/Finder.h
+type FileInfo struct {
+	FileType            uint32
+	FileCreator         uint32
+	FinderFlags         uint16
+	Location            Point
+	ReservedField       uint16
+	Reserved1           [4]int16
+	ExtendedFinderFlags uint16
+	Reserved2           int16
+	PutAwayFolderID     int32
+}
+
+type FolderInfo struct {
+	WindowBounds        Rect
+	FinderFlags         uint16
+	Location            Point
+	ReservedField       uint16
+	ScrollPosition      Point
+	Reserved1           int32
+	ExtendedFinderFlags uint16
+	Reserved2           int16
+	PutAwayFolderID     int32
+}
+
+type TimeSpec syscall.Timespec
 
 func (ts TimeSpec) String() string {
 	return fmt.Sprintf("Sec: %d, Nsec: %d", ts.Sec, ts.Nsec)
@@ -225,7 +268,23 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 		fmt.Println("ATTR_CMN_BKUPTIME not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_FNDRINFO > 0 {
-		fmt.Println("ATTR_CMN_FNDRINFO not supported yet", pos())
+		// (read/write) 32 bytes of data for use by the Finder.  Equivalent to the concatenation
+		// of a FileInfo structure and an ExtendedFileInfo structure (or, for
+		// directories, a FolderInfo structure and an ExtendedFolderInfo structure).
+		// These structures are defined in <CarbonCore/Finder.h>.
+
+		// This attribute is not byte swapped by the file system.  The value of multi-byte multibyte
+		// byte fields on disk is always big endian.  When running on a little endian
+		// system (such as Darwin on x86), you must byte swap any multibyte fields.
+		if results.IsFolder() {
+			if err = binary.Read(r, binary.BigEndian, &results.FolderInfo); err != nil {
+				return results, fmt.Errorf("failed reading finder folder information - %s", err)
+			}
+		} else {
+			if err = binary.Read(r, binary.BigEndian, &results.FileInfo); err != nil {
+				return results, fmt.Errorf("failed reading finder file information - %s", err)
+			}
+		}
 	}
 	if mask.CommonAttr&ATTR_CMN_OWNERID > 0 {
 		fmt.Println("ATTR_CMN_OWNERID not supported yet", pos())

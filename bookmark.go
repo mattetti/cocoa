@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -60,6 +61,28 @@ const (
 	bmk_url_st_relative = 0x0002
 )
 
+// IsBookmark returns positively if the passed file path is an alias.
+func IsBookmark(src string) bool {
+	srcPath, err := filepath.Abs(src)
+	if err != nil {
+		return false
+	}
+	srcPath = filepath.Clean(srcPath)
+
+	buf := make([]byte, 256)
+	fileAttrs, err := darwin.GetAttrList(srcPath,
+		darwin.AttrListMask{
+			CommonAttr: darwin.ATTR_CMN_OBJTYPE | darwin.ATTR_CMN_FNDRINFO,
+		},
+		buf, darwin.FSOPT_NOFOLLOW)
+	if err != nil {
+		log.Printf("failed to retrieve file attribute list - %s", err)
+		return false
+	}
+
+	return fileAttrs.FileInfo.FinderFlags&darwin.FFKIsAlias > 0
+}
+
 // Bookmark acts like os.Symlink but instead of creating a symlink, a bookmark is stored.
 func Bookmark(src, dst string) error {
 	srcPath, err := filepath.Abs(src)
@@ -102,16 +125,24 @@ func Bookmark(src, dst string) error {
 		return fmt.Errorf("failed to retrieve volume attribute list - %s", err)
 	}
 
-	// TODO: check that the source is not already a bookmark
-
 	// file attributes
 	fileAttrs, err := darwin.GetAttrList(srcPath,
 		darwin.AttrListMask{
-			CommonAttr: darwin.ATTR_CMN_OBJTYPE | darwin.ATTR_CMN_OBJTYPE | darwin.ATTR_CMN_CRTIME | darwin.ATTR_CMN_FILEID,
+			CommonAttr: darwin.ATTR_CMN_OBJTYPE |
+				darwin.ATTR_CMN_FNDRINFO |
+				darwin.ATTR_CMN_CRTIME |
+				darwin.ATTR_CMN_FILEID,
 		},
 		buf, darwin.FSOPT_NOFOLLOW)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve file attribute list - %s", err)
+	}
+
+	// TODO: decode the source alias and adjust the source instead of failing.
+	// macOS UI lest you create an alias to an alias by reading the alias source
+	// and creating another version of the alias.
+	if fileAttrs.FileInfo.FinderFlags&darwin.FFKIsAlias > 0 {
+		return fmt.Errorf("can't safely bookmark to a bookmark, choose another source")
 	}
 
 	bookmark := &BookmarkData{
@@ -141,10 +172,13 @@ func Bookmark(src, dst string) error {
 	// file properties
 	bb.Reset()
 	switch fileAttrs.ObjType {
+	// file
 	case darwin.VREG:
 		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
+		// folder
 	case darwin.VDIR:
 		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsDirectory))
+		// symlink
 	case darwin.VLNK:
 		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsSymbolicLink))
 	default:
