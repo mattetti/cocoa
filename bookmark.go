@@ -255,7 +255,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	binary.Write(buf, binary.LittleEndian, uint32(len(b.CNIDPath)*4))
 	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
 	for _, cnid := range b.CNIDPath {
-		buf.Write(encodedUint32(uint32(cnid)))
+		binary.Write(buf, binary.LittleEndian, uint32(cnid))
 	}
 	padBuf(buf)
 
