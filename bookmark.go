@@ -379,6 +379,12 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	return err
 }
 
+func (b *BookmarkData) String() string {
+	out := fmt.Sprintf("Bookmark:\nSource Path: %s\n", filepath.Join(b.Path...))
+	out += fmt.Sprintf("CNID path: %v\n", b.CNIDPath)
+	return out
+}
+
 func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
 	d, err := newBookmarkDecoder(r)
 	if err != nil {
@@ -394,12 +400,24 @@ func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
 		return nil, fmt.Errorf("failed to read the TOC - %s", err)
 	}
 	// we now need to use the oMap to extract the data
+
+	// path
 	offset, ok := d.oMap[darwin.KBookmarkPath]
 	if !ok {
 		return nil, fmt.Errorf("couldn't read the path offset")
 	}
 	d.seek(int64(offset), io.SeekStart)
 	d.b.Path, err = d.decodeStringSlice()
+	if err != nil {
+		d.err = err
+	}
+
+	offset, ok = d.oMap[darwin.KBookmarkCNIDPath]
+	if !ok {
+		return nil, fmt.Errorf("couldn't read the path offset")
+	}
+	d.seek(int64(offset), io.SeekStart)
+	d.b.CNIDPath, err = d.decodeUint64Slice()
 	if err != nil {
 		d.err = err
 	}
@@ -494,7 +512,7 @@ func (d *bookmarkDecoder) decodeStringSlice() ([]string, error) {
 	d.read(&size)
 	d.read(&typeMask)
 	dType := typeMask & bmk_data_type_mask
-	// dSubType := typeMast & bmk_data_subtype_mask
+	// dSubType := typeMask & bmk_data_subtype_mask
 
 	if dType != bmk_array {
 		return nil, fmt.Errorf("unexpected array type, expected %d got %d", bmk_array, dType)
@@ -516,6 +534,51 @@ func (d *bookmarkDecoder) decodeStringSlice() ([]string, error) {
 	}
 
 	return s, nil
+}
+
+// FIXME: decodeUint64Slice really decodes a uint32 slice and converts it to uint64
+func (d *bookmarkDecoder) decodeUint64Slice() ([]uint64, error) {
+	var err error
+	var size uint32
+	var typeMask uint32
+	d.read(&size)
+	d.read(&typeMask)
+	dType := typeMask & bmk_data_type_mask
+	// dSubType := typeMask & bmk_data_subtype_mask
+
+	if dType != bmk_array {
+		return nil, fmt.Errorf("unexpected array type, expected %d got %d", bmk_array, dType)
+	}
+
+	nItems := size / 4
+	items := make([]uint32, nItems)
+	for i := uint32(0); i < nItems; i++ {
+		items[i], err = d.decodeUint32()
+		if err != nil {
+			return nil, err
+		}
+	}
+	output := make([]uint64, nItems)
+	for i, n := range items {
+		output[i] = uint64(n)
+	}
+	return output, d.err
+}
+
+func (d *bookmarkDecoder) decodeUint32() (uint32, error) {
+	var len uint32
+	var typeMask uint32
+	d.read(&len)
+	d.read(&typeMask)
+	dType := typeMask & bmk_data_type_mask
+	dSubType := typeMask & bmk_data_subtype_mask
+
+	if dType != bmk_number && dSubType != darwin.KCFNumberSInt32Type {
+		return 0, fmt.Errorf("unexpected array type, expected %d got %d", bmk_array, dType)
+	}
+	var n uint32
+	d.read(&n)
+	return n, d.err
 }
 
 func (d *bookmarkDecoder) decodeString() (string, error) {
