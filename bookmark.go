@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/mattetti/cocoa/darwin"
 )
@@ -67,7 +68,6 @@ func Bookmark(src, dst string) error {
 		return fmt.Errorf("failed to get the path of the source - %s", err)
 	}
 	srcPath = filepath.Clean(srcPath)
-	fmt.Println("from", srcPath, "to", dst)
 	// read the attributes of the source.
 	var stat syscall.Statfs_t
 
@@ -114,13 +114,13 @@ func Bookmark(src, dst string) error {
 	}
 
 	bookmark := &BookmarkData{
-		FileCreationDate:   fileAttrs.CreationTime,
+		FileCreationDate:   fileAttrs.CreationTime.Time(),
 		VolumePath:         volPath,
 		VolumeIsRoot:       volPath == "/",
 		VolumeURL:          "file://" + volPath,
 		VolumeName:         volumeAttrs.VolName,
 		VolumeSize:         volumeAttrs.VolSize,
-		VolumeCreationDate: volumeAttrs.CreationTime,
+		VolumeCreationDate: volumeAttrs.CreationTime.Time(),
 		VolumeUUID:         strings.ToUpper(volumeAttrs.StringVolUUID()),
 		VolumeProperties:   []byte{},
 		CreationOptions:    512,
@@ -194,7 +194,7 @@ func Bookmark(src, dst string) error {
 type BookmarkData struct {
 	Path                []string
 	CNIDPath            []uint64
-	FileCreationDate    *darwin.TimeSpec
+	FileCreationDate    time.Time
 	FileProperties      []byte
 	ContainingFolderIDX uint32
 	VolumePath          string
@@ -202,7 +202,7 @@ type BookmarkData struct {
 	VolumeURL           string // file://' + volPath
 	VolumeName          string
 	VolumeSize          int64
-	VolumeCreationDate  *darwin.TimeSpec
+	VolumeCreationDate  time.Time
 	VolumeUUID          string // must be uppercase
 	VolumeProperties    []byte
 	CreationOptions     uint32 // 512
@@ -267,7 +267,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 
 	// KBookmarkFileCreationDate 0x04 0x10
 	oMap[darwin.KBookmarkFileCreationDate] = buf.Len()
-	buf.Write(encodedTimeSpec(b.FileCreationDate))
+	buf.Write(encodedTime(b.FileCreationDate))
 	padBuf(buf)
 
 	// 0x54 0x10 unknown but seems to always be 1
@@ -312,7 +312,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 
 	// KBookmarkVolumeCreationDate 0x13 0x20
 	oMap[darwin.KBookmarkVolumeCreationDate] = buf.Len()
-	buf.Write(encodedTimeSpec(b.VolumeCreationDate))
+	buf.Write(encodedTime(b.VolumeCreationDate))
 	padBuf(buf)
 
 	// KBookmarkVolumeProperties 0x20 0x20
@@ -382,6 +382,8 @@ func (b *BookmarkData) Write(w io.Writer) error {
 func (b *BookmarkData) String() string {
 	out := fmt.Sprintf("Bookmark:\nSource Path: %s\n", filepath.Join(b.Path...))
 	out += fmt.Sprintf("CNID path: %v\n", b.CNIDPath)
+	out += fmt.Sprintf("File creation date: %v\n", b.FileCreationDate)
+	out += fmt.Sprintf("File Properties: %#v\n", b.FileProperties)
 	return out
 }
 
@@ -401,25 +403,46 @@ func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
 	}
 	// we now need to use the oMap to extract the data
 
-	// path
-	offset, ok := d.oMap[darwin.KBookmarkPath]
-	if !ok {
-		return nil, fmt.Errorf("couldn't read the path offset")
-	}
-	d.seek(int64(offset), io.SeekStart)
-	d.b.Path, err = d.decodeStringSlice()
-	if err != nil {
-		d.err = err
-	}
-
-	offset, ok = d.oMap[darwin.KBookmarkCNIDPath]
-	if !ok {
-		return nil, fmt.Errorf("couldn't read the path offset")
-	}
-	d.seek(int64(offset), io.SeekStart)
-	d.b.CNIDPath, err = d.decodeUint64Slice()
-	if err != nil {
-		d.err = err
+	for key, offset := range d.oMap {
+		switch key {
+		case darwin.KBookmarkPath:
+			// path
+			d.seek(int64(offset), io.SeekStart)
+			d.b.Path, err = d.decodeStringSlice()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the file path - %s", err)
+				return nil, d.err
+			}
+		case darwin.KBookmarkCNIDPath:
+			// CNID path
+			d.seek(int64(offset), io.SeekStart)
+			var tmpSlices []uint32
+			tmpSlices, err = d.decodeUint32Slice()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the CNID path - %s", err)
+				return nil, d.err
+			}
+			cnidPaths := make([]uint64, len(tmpSlices))
+			for i, tmp := range tmpSlices {
+				cnidPaths[i] = uint64(tmp)
+			}
+			d.b.CNIDPath = cnidPaths
+		case darwin.KBookmarkFileProperties:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.FileProperties, err = d.decodeBytes()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the file properties - %s", err)
+				return nil, d.err
+			}
+		case darwin.KBookmarkFileCreationDate:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.FileCreationDate, err = d.decodeTime()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the file creation date - %s", err)
+			}
+		default:
+			fmt.Printf("%#x not parsed\n", key)
+		}
 	}
 
 	return d.b, d.err
@@ -536,9 +559,7 @@ func (d *bookmarkDecoder) decodeStringSlice() ([]string, error) {
 	return s, nil
 }
 
-// FIXME: decodeUint64Slice really decodes a uint32 slice and converts it to uint64
-func (d *bookmarkDecoder) decodeUint64Slice() ([]uint64, error) {
-	var err error
+func (d *bookmarkDecoder) decodeUint32Slice() ([]uint32, error) {
 	var size uint32
 	var typeMask uint32
 	d.read(&size)
@@ -553,16 +574,9 @@ func (d *bookmarkDecoder) decodeUint64Slice() ([]uint64, error) {
 	nItems := size / 4
 	items := make([]uint32, nItems)
 	for i := uint32(0); i < nItems; i++ {
-		items[i], err = d.decodeUint32()
-		if err != nil {
-			return nil, err
-		}
+		d.read(&items[i])
 	}
-	output := make([]uint64, nItems)
-	for i, n := range items {
-		output[i] = uint64(n)
-	}
-	return output, d.err
+	return items, d.err
 }
 
 func (d *bookmarkDecoder) decodeUint32() (uint32, error) {
@@ -571,10 +585,10 @@ func (d *bookmarkDecoder) decodeUint32() (uint32, error) {
 	d.read(&len)
 	d.read(&typeMask)
 	dType := typeMask & bmk_data_type_mask
-	dSubType := typeMask & bmk_data_subtype_mask
+	// dSubType := typeMask & bmk_data_subtype_mask
 
-	if dType != bmk_number && dSubType != darwin.KCFNumberSInt32Type {
-		return 0, fmt.Errorf("unexpected array type, expected %d got %d", bmk_array, dType)
+	if dType != bmk_number {
+		return 0, fmt.Errorf("unexpected number type, expected %d got %d", bmk_number, dType)
 	}
 	var n uint32
 	d.read(&n)
@@ -593,6 +607,34 @@ func (d *bookmarkDecoder) decodeString() (string, error) {
 	strB := make([]byte, len)
 	d.read(&strB)
 	return string(strB), nil
+}
+
+func (d *bookmarkDecoder) decodeBytes() ([]byte, error) {
+	var len uint32
+	var typeMask uint32
+	d.read(&len)
+	d.read(&typeMask)
+	dType := typeMask & bmk_data_type_mask
+	if dType != bmk_data {
+		return nil, fmt.Errorf("unexpected byte type, expected %d got %d", bmk_data, dType)
+	}
+	data := make([]byte, len)
+	d.read(&data)
+	return data, d.err
+}
+
+func (d *bookmarkDecoder) decodeTime() (time.Time, error) {
+	var len uint32
+	var typeMask uint32
+	d.read(&len)
+	d.read(&typeMask)
+	dType := typeMask & bmk_data_type_mask
+	if dType != bmk_date {
+		return time.Time{}, fmt.Errorf("unexpected date type, expected %d got %d", bmk_date, dType)
+	}
+	var secs float64
+	d.readBE(&secs)
+	return darwin.Epoch.Add(time.Duration(int64(secs)) * time.Second), d.err
 }
 
 func (d *bookmarkDecoder) seek(offset int64, whence int) {
@@ -698,14 +740,14 @@ func encodedStringItem(str string) []byte {
 	return buf
 }
 
-func encodedTimeSpec(ts *darwin.TimeSpec) []byte {
+func encodedTime(ts time.Time) []byte {
 	buf := &bytes.Buffer{}
 	// size
 	binary.Write(buf, binary.LittleEndian, uint32(8))
 	// type
 	binary.Write(buf, binary.LittleEndian, uint32(bmk_date|bmk_st_zero))
 	// data
-	binary.Write(buf, binary.BigEndian, float64(ts.DarwinDuration().Seconds()))
+	binary.Write(buf, binary.BigEndian, float64(ts.Sub(darwin.Epoch).Seconds()))
 	return buf.Bytes()
 }
 

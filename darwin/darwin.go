@@ -21,7 +21,8 @@ const (
 )
 
 var (
-	darwinEpoch = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	// Epoch is the darwin epoch instead of unix'
+	Epoch = time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 )
 
 type AttrList struct {
@@ -97,7 +98,7 @@ func (ts TimeSpec) Time() time.Time {
 }
 
 func (ts TimeSpec) DarwinDuration() time.Duration {
-	return ts.Time().Sub(darwinEpoch)
+	return ts.Time().Sub(Epoch)
 }
 
 // SetAlias flag the destination file as an alias/bookmark. Don't use on the wrong file!

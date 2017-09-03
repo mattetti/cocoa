@@ -42,9 +42,8 @@ func parse(src string) {
 	defer f.Close()
 
 	b, err := cocoa.BookmarkFromReader(f)
+	fmt.Printf("%v\n", b)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%v\n", b)
-
 }
