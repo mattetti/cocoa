@@ -27,7 +27,7 @@ var (
 
 type AttrList struct {
 	Name               string
-	FileID             uint64
+	FileID             uint32
 	ReturnedAttributes *AttrSet
 	CreationTime       *TimeSpec
 	VolName            string

@@ -126,7 +126,8 @@ func Bookmark(src, dst string) error {
 		CreationOptions:    512,
 		WasFileReference:   true,
 		UserName:           "unknown",
-		UID:                uint32(fileAttrs.FileID),
+		CNID:               uint32(fileAttrs.FileID),
+		UID:                99,
 	}
 
 	// volume properties
@@ -160,7 +161,7 @@ func Bookmark(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
 	}
-	bookmark.CNIDPath = []uint64{subPathAttrs.FileID}
+	bookmark.CNIDPath = []uint32{subPathAttrs.FileID}
 	bookmark.Path = []string{filepath.Base(subPath)}
 
 	// walk the path and extract the file id of each sub path
@@ -178,7 +179,7 @@ func Bookmark(src, dst string) error {
 		if err != nil {
 			return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
 		}
-		bookmark.CNIDPath = append([]uint64{subPathAttrs.FileID}, bookmark.CNIDPath...)
+		bookmark.CNIDPath = append([]uint32{subPathAttrs.FileID}, bookmark.CNIDPath...)
 	}
 
 	bookmark.ContainingFolderIDX = uint32(len(bookmark.Path)) - 2
@@ -193,7 +194,7 @@ func Bookmark(src, dst string) error {
 
 type BookmarkData struct {
 	Path                []string
-	CNIDPath            []uint64
+	CNIDPath            []uint32
 	FileCreationDate    time.Time
 	FileProperties      []byte
 	ContainingFolderIDX uint32
@@ -208,6 +209,7 @@ type BookmarkData struct {
 	CreationOptions     uint32 // 512
 	WasFileReference    bool   // true
 	UserName            string // unknown
+	CNID                uint32
 	UID                 uint32 // 99
 }
 
@@ -257,6 +259,10 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	for _, cnid := range b.CNIDPath {
 		binary.Write(buf, binary.LittleEndian, uint32(cnid))
 	}
+	padBuf(buf)
+
+	oMap[darwin.KBookmarkFileID] = buf.Len()
+	buf.Write(encodedUint32(b.CNID))
 	padBuf(buf)
 
 	// file properties
@@ -416,17 +422,11 @@ func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
 		case darwin.KBookmarkCNIDPath:
 			// CNID path
 			d.seek(int64(offset), io.SeekStart)
-			var tmpSlices []uint32
-			tmpSlices, err = d.decodeUint32Slice()
+			d.b.CNIDPath, err = d.decodeUint32Slice()
 			if err != nil {
 				d.err = fmt.Errorf("failed to decode the CNID path - %s", err)
 				return nil, d.err
 			}
-			cnidPaths := make([]uint64, len(tmpSlices))
-			for i, tmp := range tmpSlices {
-				cnidPaths[i] = uint64(tmp)
-			}
-			d.b.CNIDPath = cnidPaths
 		case darwin.KBookmarkFileProperties:
 			d.seek(int64(offset), io.SeekStart)
 			d.b.FileProperties, err = d.decodeBytes()
@@ -439,6 +439,12 @@ func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
 			d.b.FileCreationDate, err = d.decodeTime()
 			if err != nil {
 				d.err = fmt.Errorf("failed to decode the file creation date - %s", err)
+			}
+		case darwin.KBookmarkFileID:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.CNID, err = d.decodeUint32()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the file CNID - %s", err)
 			}
 		default:
 			fmt.Printf("%#x not parsed\n", key)
