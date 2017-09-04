@@ -1,10 +1,8 @@
-// +build linux,windows,!darwin
-
 package cocoa
 
 /*
 	No op implementations of the features so the package can be compiled
-	on other machines
+	on other machines and godoc can work fine.
 */
 
 // IsAlias returns positively if the passed file path is an alias.
