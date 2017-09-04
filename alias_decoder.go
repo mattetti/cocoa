@@ -8,7 +8,7 @@ import (
 )
 
 // AliasFromReader takes an io.reader pointing to an alias file
-// decodes it and returns the contained bookkmak data.
+// decodes it and returns the contained bookmark data.
 func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 	d, err := newBookmarkDecoder(r)
 	if err != nil {
