@@ -11,7 +11,9 @@ import (
 	"github.com/mattetti/cocoa/darwin"
 )
 
-func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
+// AliasFromReader takes an io.reader pointing to an alias file
+// decodes it and returns the contained bookkmak data.
+func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 	d, err := newBookmarkDecoder(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read source - %s", err)
@@ -25,8 +27,9 @@ func BookmarkFromReader(r io.Reader) (*BookmarkData, error) {
 	if err := d.toc(); err != nil {
 		return nil, fmt.Errorf("failed to read the TOC - %s", err)
 	}
-	// we now need to use the oMap to extract the data
 
+	// we now need to use the oMap to extract the data
+	// TODO: read all the keys
 	for key, offset := range d.oMap {
 		switch key {
 		case darwin.KBookmarkPath:

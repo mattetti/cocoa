@@ -17,22 +17,24 @@ import (
 )
 
 /*
-	Cocoa provides an API to persist NSURLs. Older versions of the OS were using
-	alias records but that API was deprecated in favor of bookmarks. Cocoa does
-	also support symlinks and hardlinks but those behave differently than
-	bookmarks. Unfortunately, Apple doesn't document the Bookmark Data format.
+	 Cocoa users can create virtual links to files using 3 ways:
+	 symlinks, hard links and aliases. Symlinks point to a specific path,
+	hard links to a specific files but require to be all deleted before deleting
+	the original file and finally aliases which act like hard links but with more flexibility.
 
+	Aliases wrap the BookmarkData format.
 	Here is some documentation on the usage of bookmarks:
 	https://developer.apple.com/library/content/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/AccessingFilesandDirectories/AccessingFilesandDirectories.html#//apple_ref/doc/uid/TP40010672-CH3-SW10
 
 	The format was partly reverse engineered and documented in a few place, here
 	is the best summary I found:
 	https://github.com/al45tair/mac_alias/blob/master/doc/bookmark_fmt.rst
+	and http://michaellynn.github.io/2015/10/24/apples-bookmarkdata-exposed/
 	(documentation copied in doc/* in case the original repo disappears)
-	Note that the documentation is incorrect and you should refer to the
-	code to see the small differences.
+	Note that the documentation refers to the bookmark representation.
+	The header for an alias is different but the body is the same.
 
-	Another important point is that to become an alias/bookmark the
+	Another important point is that to become an alias file, the
 	generated binary file must have a special finder extended attribute flag set.
 */
 
@@ -61,8 +63,8 @@ const (
 	bmk_url_st_relative = 0x0002
 )
 
-// IsBookmark returns positively if the passed file path is an alias.
-func IsBookmark(src string) bool {
+// IsAlias returns positively if the passed file path is an alias.
+func IsAlias(src string) bool {
 	srcPath, err := filepath.Abs(src)
 	if err != nil {
 		return false
@@ -83,8 +85,8 @@ func IsBookmark(src string) bool {
 	return fileAttrs.FileInfo.FinderFlags&darwin.FFKIsAlias > 0
 }
 
-// Bookmark acts like os.Symlink but instead of creating a symlink, a bookmark is stored.
-func Bookmark(src, dst string) error {
+// Alias acts like os.Symlink but instead of creating a symlink, a bookmark is stored.
+func Alias(src, dst string) error {
 	srcPath, err := filepath.Abs(src)
 	if err != nil {
 		return fmt.Errorf("failed to get the path of the source - %s", err)
@@ -227,6 +229,7 @@ func Bookmark(src, dst string) error {
 	return err
 }
 
+// BookmarkData represents the data structure holding the bookmark information
 type BookmarkData struct {
 	Path                []string
 	CNIDPath            []uint32

@@ -29,11 +29,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cocoa.IsBookmark(*flagSrc) {
-		fmt.Println("let's not bookmark to a bookmark")
+	if cocoa.IsAlias(*flagSrc) {
+		fmt.Println("let's not alias to an alias")
 		os.Exit(1)
 	}
-	if err := cocoa.Bookmark(*flagSrc, *flagDest); err != nil {
+	if err := cocoa.Alias(*flagSrc, *flagDest); err != nil {
 		panic(err)
 	}
 }
