@@ -93,12 +93,6 @@ func Bookmark(src, dst string) error {
 	// read the attributes of the source.
 	var stat syscall.Statfs_t
 
-	w, err := os.Create(filepath.Clean(dst))
-	if err != nil {
-		return fmt.Errorf("failed to create the file at destination - %s", err)
-	}
-	defer w.Close()
-
 	err = syscall.Statfs(srcPath, &stat)
 	if err != nil {
 		return fmt.Errorf("failed to read the file stats - %s", err)
@@ -144,6 +138,12 @@ func Bookmark(src, dst string) error {
 	if fileAttrs.FileInfo.FinderFlags&darwin.FFKIsAlias > 0 {
 		return fmt.Errorf("can't safely bookmark to a bookmark, choose another source")
 	}
+
+	w, err := os.Create(filepath.Clean(dst))
+	if err != nil {
+		return fmt.Errorf("failed to create the file at destination - %s", err)
+	}
+	defer w.Close()
 
 	bookmark := &BookmarkData{
 		FileCreationDate:   fileAttrs.CreationTime.Time(),
