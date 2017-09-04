@@ -1,3 +1,6 @@
+[![GoDoc](https://godoc.org/github.com/mattetti/cocoa?status.svg)](https://godoc.org/github.com/mattetti/cocoa)
+
+
 # Cocoa
 Pure Go reimplementation of some Cocoa specific features.
 
@@ -19,4 +22,4 @@ if err := cocoa.Bookmark("source/path", "destination/path"); err != nil {
 
 Yes, the API doesn't use the usual Go's destination then source argument list but hey, I wrote the code so I get to decide :p
 
-
+Check [GoDoc](https://godoc.org/github.com/mattetti/cocoa) for more information.
