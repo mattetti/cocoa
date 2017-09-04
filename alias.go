@@ -199,7 +199,7 @@ func Alias(src, dst string) error {
 	bookmark.Write(w)
 	w.Close()
 	// turn the file into an actual alias by setting the finder flags
-	darwin.SetAlias(dst)
+	darwin.SetAsAlias(dst)
 
 	return err
 }
