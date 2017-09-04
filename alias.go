@@ -63,6 +63,47 @@ const (
 	bmk_url_st_relative = 0x0002
 )
 
+const (
+	// Bookmark keys
+	//                           = 0x1003
+	KBookmarkPath           = 0x1004 // Array of path components
+	KBookmarkCNIDPath       = 0x1005 // Array of CNIDs
+	KBookmarkFileProperties = 0x1010 // (CFURL rp flags,
+	//  CFURL rp flags asked for,
+	//  8 bytes NULL)
+	KBookmarkFileName         = 0x1020
+	KBookmarkFileID           = 0x1030
+	KBookmarkFileCreationDate = 0x1040
+	KBookmarkUnknown          = 0x1054 // always 1?
+	KBookmarkUnknown1         = 0x1055 // point to value in 0x1054
+	KBookmarkUnknown2         = 0x1056 // boolean, always true?
+
+	//                           = 0x1101   // ?
+	//                           = 0x1102   // ?
+	KBookmarkTOCPath            = 0x2000 // A list of (TOC id, ?) pairs
+	KBookmarkVolumePath         = 0x2002
+	KBookmarkVolumeURL          = 0x2005
+	KBookmarkVolumeName         = 0x2010
+	KBookmarkVolumeUUID         = 0x2011 // Stored (perversely) as a string
+	KBookmarkVolumeSize         = 0x2012
+	KBookmarkVolumeCreationDate = 0x2013
+	KBookmarkVolumeProperties   = 0x2020
+	KBookmarkVolumeIsRoot       = 0x2030 // True if volume is FS root
+	KBookmarkVolumeBookmark     = 0x2040 // Embedded bookmark for disk image (TOC id)
+	KBookmarkVolumeMountPoint   = 0x2050 // A URL
+	//                           = 0x2070
+	KBookmarkContainingFolder = 0xc001 // Index of containing folder in path
+	KBookmarkUserName         = 0xc011 // User that created bookmark
+	KBookmarkUID              = 0xc012 // UID that created bookmark
+	KBookmarkWasFileReference = 0xd001 // True if the URL was a file reference
+	KBookmarkCreationOptions  = 0xd010
+	KBookmarkURLLengths       = 0xe003 // See below
+	KBookmarkFullFileName     = 0xf017
+	//                           = 0xf022
+	KBookmarkSecurityExtension = 0xf080
+	//                           = 0xf081
+)
+
 // IsAlias returns positively if the passed file path is an alias.
 func IsAlias(src string) bool {
 	srcPath, err := filepath.Abs(src)
@@ -259,7 +300,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	// track the offset within the body so we can build the TOC
 	oMap := offsetMap{}
 
-	oMap[darwin.KBookmarkCreationOptions] = buf.Len()
+	oMap[KBookmarkCreationOptions] = buf.Len()
 	buf.Write(encodedUint32(1024))
 
 	// write each path items one by one
@@ -269,7 +310,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		pathOffsets[i] = 4 + buf.Len()
 		// get the offset of the last item in the path
 		if i == len(b.Path)-1 {
-			oMap[darwin.KBookmarkFullFileName] = pathOffsets[i]
+			oMap[KBookmarkFullFileName] = pathOffsets[i]
 		}
 		buf.Write(encodedStringItem(item))
 	}
@@ -279,7 +320,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	// the TOC will point to here so we can find how many items are in the array
 	// and access each item to rebuild the path.
 	// 0x04 0x10
-	oMap[darwin.KBookmarkPath] = buf.Len()
+	oMap[KBookmarkPath] = buf.Len()
 	// number of items
 	binary.Write(buf, binary.LittleEndian, uint32(len(b.Path)*4))
 	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
@@ -291,7 +332,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 
 	// file ids for the path
 	// 0x05 0x10
-	oMap[darwin.KBookmarkCNIDPath] = buf.Len()
+	oMap[KBookmarkCNIDPath] = buf.Len()
 	binary.Write(buf, binary.LittleEndian, uint32(len(b.CNIDPath)*4))
 	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
 	for _, cnid := range b.CNIDPath {
@@ -299,40 +340,40 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	}
 	padBuf(buf)
 
-	oMap[darwin.KBookmarkFileID] = buf.Len()
+	oMap[KBookmarkFileID] = buf.Len()
 	buf.Write(encodedUint32(b.CNID))
 	padBuf(buf)
 
 	// file properties
 	// 0x10 0x10
-	oMap[darwin.KBookmarkFileProperties] = buf.Len()
+	oMap[KBookmarkFileProperties] = buf.Len()
 	buf.Write(encodedBytes(b.FileProperties))
 	padBuf(buf)
 
 	// KBookmarkFileCreationDate 0x04 0x10
-	oMap[darwin.KBookmarkFileCreationDate] = buf.Len()
+	oMap[KBookmarkFileCreationDate] = buf.Len()
 	buf.Write(encodedTime(b.FileCreationDate))
 	padBuf(buf)
 
 	// 0x54 0x10 unknown but seems to always be 1
 	// 0x55 0x10 unknown, point to the same value
-	oMap[darwin.KBookmarkUnknown] = buf.Len()
-	oMap[darwin.KBookmarkUnknown1] = buf.Len()
+	oMap[KBookmarkUnknown] = buf.Len()
+	oMap[KBookmarkUnknown1] = buf.Len()
 	buf.Write(encodedUint32(uint32(1)))
 	padBuf(buf)
 
 	// 0x56 0x10 bool set to true
-	oMap[darwin.KBookmarkUnknown2] = buf.Len()
+	oMap[KBookmarkUnknown2] = buf.Len()
 	buf.Write(encodedBool(true))
 	padBuf(buf)
 
 	// KBookmarkVolumePath 0x02 0x20
-	oMap[darwin.KBookmarkVolumePath] = buf.Len()
+	oMap[KBookmarkVolumePath] = buf.Len()
 	buf.Write(encodedStringItem(b.VolumePath))
 	padBuf(buf)
 
 	// KBookmarkVolumeURL 0x05 0x20
-	oMap[darwin.KBookmarkVolumeURL] = buf.Len()
+	oMap[KBookmarkVolumeURL] = buf.Len()
 	binary.Write(buf, binary.LittleEndian, uint32(len(b.VolumeURL)))
 	// only support absolute path for now
 	binary.Write(buf, binary.LittleEndian, uint32(bmk_url|bmk_url_st_absolute))
@@ -340,52 +381,52 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	padBuf(buf)
 
 	// KBookmarkVolumeName 0x10 0x20
-	oMap[darwin.KBookmarkVolumeName] = buf.Len()
+	oMap[KBookmarkVolumeName] = buf.Len()
 	buf.Write(encodedStringItem(b.VolumeName))
 	padBuf(buf)
 
 	// KBookmarkVolumeUUID 0x11 0x20
-	oMap[darwin.KBookmarkVolumeUUID] = buf.Len()
+	oMap[KBookmarkVolumeUUID] = buf.Len()
 	buf.Write(encodedStringItem(b.VolumeUUID))
 	padBuf(buf)
 
 	// KBookmarkVolumeSize 0x12 0x20
-	oMap[darwin.KBookmarkVolumeSize] = buf.Len()
+	oMap[KBookmarkVolumeSize] = buf.Len()
 	buf.Write(encodedUint64(uint64(b.VolumeSize)))
 	padBuf(buf)
 
 	// KBookmarkVolumeCreationDate 0x13 0x20
-	oMap[darwin.KBookmarkVolumeCreationDate] = buf.Len()
+	oMap[KBookmarkVolumeCreationDate] = buf.Len()
 	buf.Write(encodedTime(b.VolumeCreationDate))
 	padBuf(buf)
 
 	// KBookmarkVolumeProperties 0x20 0x20
-	oMap[darwin.KBookmarkVolumeProperties] = buf.Len()
+	oMap[KBookmarkVolumeProperties] = buf.Len()
 	buf.Write(encodedBytes(b.VolumeProperties))
 	padBuf(buf)
 
 	// KBookmarkVolumeIsRoot 0x30 20
-	oMap[darwin.KBookmarkVolumeIsRoot] = buf.Len()
+	oMap[KBookmarkVolumeIsRoot] = buf.Len()
 	buf.Write(encodedBool(b.VolumeIsRoot))
 	padBuf(buf)
 
 	// KBookmarkContainingFolder 0x01 0xc0
-	oMap[darwin.KBookmarkContainingFolder] = buf.Len()
+	oMap[KBookmarkContainingFolder] = buf.Len()
 	buf.Write(encodedUint32(b.ContainingFolderIDX))
 	padBuf(buf)
 
 	// KBookmarkUserName 0x11 0xc0
-	oMap[darwin.KBookmarkUserName] = buf.Len()
+	oMap[KBookmarkUserName] = buf.Len()
 	buf.Write(encodedStringItem(b.UserName))
 	padBuf(buf)
 
 	// KBookmarkUID 0x12 0xc0
-	oMap[darwin.KBookmarkUID] = buf.Len()
+	oMap[KBookmarkUID] = buf.Len()
 	buf.Write(encodedUint32(b.UID))
 	padBuf(buf)
 
 	// KBookmarkWasFileReference
-	oMap[darwin.KBookmarkWasFileReference] = buf.Len()
+	oMap[KBookmarkWasFileReference] = buf.Len()
 	buf.Write(encodedBool(b.WasFileReference))
 	padBuf(buf)
 

@@ -32,7 +32,7 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 	// TODO: read all the keys
 	for key, offset := range d.oMap {
 		switch key {
-		case darwin.KBookmarkPath:
+		case KBookmarkPath:
 			// path
 			d.seek(int64(offset), io.SeekStart)
 			d.b.Path, err = d.decodeStringSlice()
@@ -40,7 +40,7 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 				d.err = fmt.Errorf("failed to decode the file path - %s", err)
 				return nil, d.err
 			}
-		case darwin.KBookmarkCNIDPath:
+		case KBookmarkCNIDPath:
 			// CNID path
 			d.seek(int64(offset), io.SeekStart)
 			d.b.CNIDPath, err = d.decodeUint32Slice()
@@ -48,20 +48,20 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 				d.err = fmt.Errorf("failed to decode the CNID path - %s", err)
 				return nil, d.err
 			}
-		case darwin.KBookmarkFileProperties:
+		case KBookmarkFileProperties:
 			d.seek(int64(offset), io.SeekStart)
 			d.b.FileProperties, err = d.decodeBytes()
 			if err != nil {
 				d.err = fmt.Errorf("failed to decode the file properties - %s", err)
 				return nil, d.err
 			}
-		case darwin.KBookmarkFileCreationDate:
+		case KBookmarkFileCreationDate:
 			d.seek(int64(offset), io.SeekStart)
 			d.b.FileCreationDate, err = d.decodeTime()
 			if err != nil {
 				d.err = fmt.Errorf("failed to decode the file creation date - %s", err)
 			}
-		case darwin.KBookmarkFileID:
+		case KBookmarkFileID:
 			d.seek(int64(offset), io.SeekStart)
 			d.b.CNID, err = d.decodeUint32()
 			if err != nil {
