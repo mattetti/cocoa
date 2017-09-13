@@ -65,7 +65,27 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 	}
 
 	if mask.CommonAttr&ATTR_CMN_NAME > 0 {
-		fmt.Println("ATTR_CMN_NAME not supported yet", pos())
+		ref := AttrRef{}
+		if err = binary.Read(r, binary.LittleEndian, &ref); err != nil {
+			return results, fmt.Errorf("failed reading ATTR_CMN_NAME ref - %s", err)
+		}
+		offsetPos := pos()
+		// move to the offset minus the size of AttrRef (8)
+		if ref.Offset > 0 {
+			if _, err = r.Seek(int64(ref.Offset)-8, io.SeekCurrent); err != nil {
+				return results, fmt.Errorf("failed to skip to the common name - %s", err)
+			}
+		}
+		if ref.Len > 0 {
+			// len-1 because the string is null terminated
+			name := make([]byte, ref.Len-1)
+			r.Read(name)
+			results.Name = string(name)
+		}
+		// move back to the original offset
+		if _, err = r.Seek(offsetPos, io.SeekStart); err != nil {
+			return results, fmt.Errorf("failed to skip back after reading the common name - %s", err)
+		}
 	}
 
 	if mask.CommonAttr&ATTR_CMN_DEVID > 0 {
@@ -222,7 +242,7 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 	if mask.VolAttr&ATTR_VOL_NAME > 0 {
 		ref := AttrRef{}
 		if err = binary.Read(r, binary.LittleEndian, &ref); err != nil {
-			return results, fmt.Errorf("failed reading ATTR_CMN_NAME ref - %s", err)
+			return results, fmt.Errorf("failed reading ATTR_VOL_NAME ref - %s", err)
 		}
 		offsetPos := pos()
 		// move to the offset minus the size of AttrRef (8)

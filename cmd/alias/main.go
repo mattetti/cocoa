@@ -46,7 +46,7 @@ func parse(src string) {
 	defer f.Close()
 
 	b, err := cocoa.AliasFromReader(f)
-	fmt.Printf("%v\n", b)
+	fmt.Printf("%#v\n", b)
 	if err != nil {
 		panic(err)
 	}

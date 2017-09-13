@@ -12,6 +12,7 @@ import (
 
 // BookmarkData represents the data structure holding the bookmark information
 type BookmarkData struct {
+	FileSystemType      string
 	Path                []string
 	CNIDPath            []uint32
 	FileCreationDate    time.Time

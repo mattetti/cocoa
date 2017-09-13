@@ -82,16 +82,41 @@ func Alias(src, dst string) error {
 		volPathB = append(volPathB, byte(b))
 	}
 	volPath := string(volPathB)
-	// volume attributes
+	fsType := []byte{}
+	for _, b := range stat.Fstypename {
+		if b == 0 {
+			break
+		}
+		fsType = append(fsType, byte(b))
+	}
+	fileSystemType := string(fsType)
+
+	var volumeAttrs *darwin.AttrList
 	buf := make([]byte, 512)
-	volumeAttrs, err := darwin.GetAttrList(volPath,
-		darwin.AttrListMask{
-			CommonAttr: darwin.ATTR_CMN_CRTIME,
-			VolAttr:    darwin.ATTR_VOL_SIZE | darwin.ATTR_VOL_NAME | darwin.ATTR_VOL_UUID,
-		},
-		buf, 0|darwin.FSOPT_REPORT_FULLSIZE)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve volume attribute list - %s", err)
+	switch fileSystemType {
+	case "hfs":
+		volumeAttrs, err = darwin.GetAttrList(volPath,
+			darwin.AttrListMask{
+				CommonAttr: darwin.ATTR_CMN_CRTIME,
+				VolAttr: darwin.ATTR_VOL_SIZE |
+					darwin.ATTR_VOL_NAME |
+					darwin.ATTR_VOL_UUID,
+			},
+			buf, 0|darwin.FSOPT_REPORT_FULLSIZE)
+		if err != nil {
+			log.Printf("failed to retrieve volume attribute list (using blank values) - %s", err)
+			volumeAttrs = &darwin.AttrList{
+				CreationTime: &darwin.TimeSpec{},
+			}
+		}
+		//we don't seem to be able to get the vol attributes for other formats such as "exFat"
+	default:
+		volumeAttrs = &darwin.AttrList{
+			CreationTime: &darwin.TimeSpec{},
+		}
+		if st, err := os.Stat(volPath); err != nil {
+			volumeAttrs.VolSize = st.Size()
+		}
 	}
 
 	// file attributes
@@ -121,6 +146,7 @@ func Alias(src, dst string) error {
 	defer w.Close()
 
 	bookmark := &BookmarkData{
+		FileSystemType:     fileSystemType,
 		FileCreationDate:   fileAttrs.CreationTime.Time(),
 		VolumePath:         volPath,
 		VolumeIsRoot:       volPath == "/",
@@ -139,6 +165,7 @@ func Alias(src, dst string) error {
 
 	// volume properties
 	bb := &bytes.Buffer{}
+	// TODO: look into using KCFURLVolumeIsEjectable if the drive isn't a volume root
 	binary.Write(bb, binary.LittleEndian, uint64(0x81|darwin.KCFURLVolumeSupportsPersistentIDs))
 	binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
 	binary.Write(bb, binary.LittleEndian, uint64(0))
@@ -164,7 +191,7 @@ func Alias(src, dst string) error {
 	bookmark.FileProperties = bb.Bytes()
 
 	// getting data about each node of the path
-	relPath, _ := filepath.Rel(string(volPath), srcPath)
+	relPath, _ := filepath.Rel("/", srcPath)
 	buf = make([]byte, 256)
 	subPath := srcPath
 	subPathAttrs, err := darwin.GetAttrList(subPath, darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
@@ -184,7 +211,7 @@ func Alias(src, dst string) error {
 
 		bookmark.Path = append([]string{filepath.Base(dir)}, bookmark.Path...)
 		buf = make([]byte, 256)
-		subPath = filepath.Join(string(volPath), dir)
+		subPath = filepath.Join("/", dir)
 		subPathAttrs, err = darwin.GetAttrList(subPath, darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
@@ -269,4 +296,17 @@ func encodedUint64(n uint64) []byte {
 	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_number|darwin.KCFNumberSInt64Type))
 	binary.LittleEndian.PutUint64(buf[8:], n)
 	return buf
+}
+
+func nullTermStr(b []byte) string {
+	return string(b[:clen(b)])
+}
+
+func clen(n []byte) int {
+	for i := 0; i < len(n); i++ {
+		if n[i] == 0 {
+			return i
+		}
+	}
+	return len(n)
 }
