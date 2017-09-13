@@ -32,6 +32,11 @@ type BookmarkData struct {
 	UID                 uint32 // 99
 }
 
+// TargetPath returns the full path to the current target url.
+func (b *BookmarkData) TargetPath() string {
+	return fmt.Sprintf("%s%s", b.VolumePath, filepath.Join(b.Path...))
+}
+
 // Write converts the bookmark data into binary data and writes it to the passed writer.
 // Note that the writes are buffered and written all at once.
 func (b *BookmarkData) Write(w io.Writer) error {

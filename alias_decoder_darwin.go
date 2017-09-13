@@ -61,6 +61,25 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 			if err != nil {
 				d.err = fmt.Errorf("failed to decode the file CNID - %s", err)
 			}
+		case KBookmarkVolumeURL:
+			d.seek(int64(offset), io.SeekStart)
+			var length uint32
+			d.read(&length)
+			// volume type flags
+			d.seek(4, io.SeekCurrent)
+			volPathB := make([]byte, length)
+			d.read(&volPathB)
+			if d.err != nil {
+				d.err = fmt.Errorf("failed to decode the volume url - %s", err)
+				continue
+			}
+			d.b.VolumeURL = string(volPathB)
+		case KBookmarkVolumePath:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.VolumePath, err = d.decodeString()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the volume path - %s", err)
+			}
 		default:
 			fmt.Printf("%#x not parsed\n", key)
 		}
