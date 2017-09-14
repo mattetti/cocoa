@@ -189,7 +189,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	binary.Write(hbuf, binary.LittleEndian, uint32(56))
 
 	// convert the toc in bytes so we can calculate offsets
-	toc := oMap.Bytes(4)
+	toc := oMap.Bytes()
 
 	// total size minus the header
 	binary.Write(hbuf, binary.LittleEndian, 4+uint32(buf.Len()+len(toc)))
@@ -221,7 +221,7 @@ func (b *BookmarkData) String() string {
 
 type offsetMap map[uint32]int
 
-func (oMap offsetMap) Bytes(additionalOffset int) []byte {
+func (oMap offsetMap) Bytes() []byte {
 	buf := &bytes.Buffer{}
 	// Size of TOC in bytes, minus 8
 	binary.Write(buf, binary.LittleEndian, uint32(3*4+len(oMap)*(3*4)))

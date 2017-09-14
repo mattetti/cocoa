@@ -3,6 +3,7 @@ package cocoa
 import (
 	"fmt"
 	"io"
+	"os"
 )
 
 // AliasFromReader takes an io.reader pointing to an alias file
@@ -42,12 +43,31 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 				d.err = fmt.Errorf("failed to decode the CNID path - %s", err)
 				return nil, d.err
 			}
+		case KBookmarkVolumeProperties:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.VolumeProperties, err = d.decodeBytes()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the volume properties - %s", err)
+				return nil, d.err
+			}
 		case KBookmarkFileProperties:
 			d.seek(int64(offset), io.SeekStart)
 			d.b.FileProperties, err = d.decodeBytes()
 			if err != nil {
 				d.err = fmt.Errorf("failed to decode the file properties - %s", err)
 				return nil, d.err
+			}
+		case KBookmarkContainingFolder:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.ContainingFolderIDX, err = d.decodeUint32()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the containing folder IDX - %s", err)
+			}
+		case KBookmarkCreationOptions:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.CreationOptions, err = d.decodeUint32()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the creation options - %s", err)
 			}
 		case KBookmarkFileCreationDate:
 			d.seek(int64(offset), io.SeekStart)
@@ -74,6 +94,12 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 				continue
 			}
 			d.b.VolumeURL = string(volPathB)
+		case KBookmarkVolumeName:
+			d.seek(int64(offset), io.SeekStart)
+			d.b.VolumeName, err = d.decodeString()
+			if err != nil {
+				d.err = fmt.Errorf("failed to decode the volume path - %s", err)
+			}
 		case KBookmarkVolumePath:
 			d.seek(int64(offset), io.SeekStart)
 			d.b.VolumePath, err = d.decodeString()
@@ -81,7 +107,9 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 				d.err = fmt.Errorf("failed to decode the volume path - %s", err)
 			}
 		default:
-			fmt.Printf("%#x not parsed\n", key)
+			if Debug {
+				fmt.Fprintf(os.Stderr, "%#x not parsed\n", key)
+			}
 		}
 	}
 

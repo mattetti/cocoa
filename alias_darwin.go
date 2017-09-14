@@ -112,6 +112,7 @@ func Alias(src, dst string) error {
 		//we don't seem to be able to get the vol attributes for other formats such as "exFat"
 	default:
 		volumeAttrs = &darwin.AttrList{
+			VolName:      strings.Replace(volPath, "/Volumes/", "", 1),
 			CreationTime: &darwin.TimeSpec{},
 		}
 		if st, err := os.Stat(volPath); err != nil {
@@ -165,9 +166,13 @@ func Alias(src, dst string) error {
 
 	// volume properties
 	bb := &bytes.Buffer{}
-	// TODO: look into using KCFURLVolumeIsEjectable if the drive isn't a volume root
-	binary.Write(bb, binary.LittleEndian, uint64(0x81|darwin.KCFURLVolumeSupportsPersistentIDs))
-	binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
+	if bookmark.VolumeIsRoot {
+		binary.Write(bb, binary.LittleEndian, uint64(0x81|darwin.KCFURLVolumeSupportsPersistentIDs))
+		binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
+	} else {
+		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLVolumeIsLocal|darwin.KCFURLVolumeIsExternal))
+		binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
+	}
 	binary.Write(bb, binary.LittleEndian, uint64(0))
 	bookmark.VolumeProperties = bb.Bytes()
 

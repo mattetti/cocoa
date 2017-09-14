@@ -4,6 +4,10 @@
 // of Gophers on Mac.
 package cocoa
 
+var (
+	Debug bool
+)
+
 // bookmarks flags
 const (
 	bmk_data_type_mask    = 0xffffff00
