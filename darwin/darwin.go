@@ -30,6 +30,8 @@ type AttrList struct {
 	ObjType            uint32
 	FileInfo           FileInfo
 	FolderInfo         FolderInfo
+	UUID               [16]byte
+	DevID              uint32
 }
 
 // StringVolUUID returns a string formatted version of the volume UUID

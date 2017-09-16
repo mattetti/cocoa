@@ -31,6 +31,7 @@ type BookmarkData struct {
 	UserName            string // unknown
 	CNID                uint32
 	UID                 uint32 // 99
+	Filename            string
 }
 
 // TargetPath returns the full path to the current target url.
@@ -49,6 +50,15 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	oMap[KBookmarkCreationOptions] = buf.Len()
 	buf.Write(encodedUint32(1024))
 
+	slashPos := buf.Len()
+
+	if !b.VolumeIsRoot {
+		// HACK, not working for well
+		buf.Write([]byte{'/', 0x0, 0x0, 0x0})
+		buf.Write([]byte{0x0, 0xF0, 0x0, 0x0})
+		buf.Write([]byte{0x48, 0x0, 0x0, 0x0})
+	}
+
 	// write each path items one by one
 	pathOffsets := make([]int, len(b.Path))
 	for i, item := range b.Path {
@@ -56,7 +66,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		pathOffsets[i] = 4 + buf.Len()
 		// get the offset of the last item in the path
 		if i == len(b.Path)-1 {
-			oMap[KBookmarkFullFileName] = pathOffsets[i]
+			oMap[KBookmarkFullFileName] = pathOffsets[i] - 4
 		}
 		buf.Write(encodedStringItem(item))
 	}
@@ -86,9 +96,12 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	}
 	padBuf(buf)
 
-	oMap[KBookmarkFileID] = buf.Len()
-	buf.Write(encodedUint32(b.CNID))
-	padBuf(buf)
+	// file ID 0x30 0x10
+	if b.VolumeIsRoot {
+		oMap[KBookmarkFileID] = buf.Len()
+		buf.Write(encodedUint32(b.CNID))
+		padBuf(buf)
+	}
 
 	// file properties
 	// 0x10 0x10
@@ -112,6 +125,30 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	oMap[KBookmarkUnknown2] = buf.Len()
 	buf.Write(encodedBool(true))
 	padBuf(buf)
+
+	// KBookmarkTOCPath
+	if !b.VolumeIsRoot {
+		oMap[KBookmarkTOCPath] = buf.Len()
+		// array of something
+		// nbrBytesNeeded (nbr of elements * 4 bytes)
+
+		offsets := []uint32{
+			uint32(slashPos + 52),     // '/'
+			uint32(slashPos + 52 + 4), // 00F00000
+			uint32(slashPos + 52 + 8), // ?
+		}
+		for i := 0; i < len(b.Path)-2; i++ {
+			offsets = append(offsets, uint32(slashPos+52+4))
+		}
+
+		binary.Write(buf, binary.LittleEndian, uint32(42))
+		binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
+		for _, offs := range offsets {
+			binary.Write(buf, binary.LittleEndian, uint32(offs))
+		}
+
+		padBuf(buf)
+	}
 
 	// KBookmarkVolumePath 0x02 0x20
 	oMap[KBookmarkVolumePath] = buf.Len()
@@ -151,27 +188,36 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	buf.Write(encodedBytes(b.VolumeProperties))
 	padBuf(buf)
 
-	// KBookmarkVolumeIsRoot 0x30 20
-	oMap[KBookmarkVolumeIsRoot] = buf.Len()
-	buf.Write(encodedBool(b.VolumeIsRoot))
-	padBuf(buf)
+	// KBookmarkVolumeIsRoot 0x30 0x20
+	if b.VolumeIsRoot {
+		oMap[KBookmarkVolumeIsRoot] = buf.Len()
+		buf.Write(encodedBool(b.VolumeIsRoot))
+		padBuf(buf)
+	}
 
 	// KBookmarkContainingFolder 0x01 0xc0
-	oMap[KBookmarkContainingFolder] = buf.Len()
-	buf.Write(encodedUint32(b.ContainingFolderIDX))
-	padBuf(buf)
+	// TODO: only for root volumes?
+	if b.VolumeIsRoot {
+		oMap[KBookmarkContainingFolder] = buf.Len()
+		buf.Write(encodedUint32(b.ContainingFolderIDX))
+		padBuf(buf)
+	}
 
 	// KBookmarkUserName 0x11 0xc0
-	oMap[KBookmarkUserName] = buf.Len()
-	buf.Write(encodedStringItem(b.UserName))
-	padBuf(buf)
+	if b.VolumeIsRoot {
+		oMap[KBookmarkUserName] = buf.Len()
+		buf.Write(encodedStringItem(b.UserName))
+		padBuf(buf)
+	}
 
 	// KBookmarkUID 0x12 0xc0
-	oMap[KBookmarkUID] = buf.Len()
-	buf.Write(encodedUint32(b.UID))
-	padBuf(buf)
+	if b.VolumeIsRoot {
+		oMap[KBookmarkUID] = buf.Len()
+		buf.Write(encodedUint32(b.UID))
+		padBuf(buf)
+	}
 
-	// KBookmarkWasFileReference
+	// KBookmarkWasFileReference 0x01 0xD0
 	oMap[KBookmarkWasFileReference] = buf.Len()
 	buf.Write(encodedBool(b.WasFileReference))
 	padBuf(buf)

@@ -50,4 +50,7 @@ func parse(src string) {
 	if err != nil {
 		panic(err)
 	}
+	if len(b.Path) != len(b.CNIDPath) {
+		fmt.Printf("The lenght of the path (%d) doesn't match the length of the CNID path (%d)\n", len(b.Path), len(b.CNIDPath))
+	}
 }

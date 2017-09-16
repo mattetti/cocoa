@@ -103,7 +103,7 @@ func (d *bookmarkDecoder) decodeStringSlice() ([]string, error) {
 	// dSubType := typeMask & bmk_data_subtype_mask
 
 	if dType != bmk_array {
-		return nil, fmt.Errorf("unexpected array type, expected %d got %d", bmk_array, dType)
+		return nil, fmt.Errorf("unexpected array type, expected %#x got %#x", bmk_array, typeMask)
 	}
 
 	nItems := size / 4
@@ -117,7 +117,7 @@ func (d *bookmarkDecoder) decodeStringSlice() ([]string, error) {
 		d.seek(int64(d.headerSize+offset), io.SeekStart)
 		s[i], err = d.decodeString()
 		if err != nil {
-			return s, err
+			return s, fmt.Errorf("failed to read the %d string in array - %v", i, err)
 		}
 	}
 
@@ -133,7 +133,7 @@ func (d *bookmarkDecoder) decodeUint32Slice() ([]uint32, error) {
 	// dSubType := typeMask & bmk_data_subtype_mask
 
 	if dType != bmk_array {
-		return nil, fmt.Errorf("unexpected array type, expected %d got %d", bmk_array, dType)
+		return nil, fmt.Errorf("unexpected array type, expected %#x got %#x", bmk_array, typeMask)
 	}
 
 	nItems := size / 4
@@ -153,11 +153,42 @@ func (d *bookmarkDecoder) decodeUint32() (uint32, error) {
 	// dSubType := typeMask & bmk_data_subtype_mask
 
 	if dType != bmk_number {
-		return 0, fmt.Errorf("unexpected number type, expected %d got %d", bmk_number, dType)
+		return 0, fmt.Errorf("unexpected number type, expected %d got %d", bmk_number, typeMask)
 	}
 	var n uint32
 	d.read(&n)
 	return n, d.err
+}
+
+func (d *bookmarkDecoder) decodeInt64() (int64, error) {
+	var len uint32
+	var typeMask uint32
+	d.read(&len)
+	d.read(&typeMask)
+	dType := typeMask & bmk_data_type_mask
+	// dSubType := typeMask & bmk_data_subtype_mask
+
+	if dType != bmk_number {
+		return 0, fmt.Errorf("unexpected number type, expected %d got %d", bmk_number, typeMask)
+	}
+	var n int64
+	d.read(&n)
+	return n, d.err
+}
+
+func (d *bookmarkDecoder) decodeBool() (bool, error) {
+	d.seek(4, io.SeekCurrent)
+	var typeMask uint32
+	d.read(&typeMask)
+	dType := typeMask & bmk_boolean
+
+	if dType != bmk_boolean {
+		return false, fmt.Errorf("unexpected a boolean type, expected %d got %d", bmk_boolean, typeMask)
+	}
+	if typeMask&bmk_data_subtype_mask == bmk_boolean_st_true {
+		return true, d.err
+	}
+	return false, d.err
 }
 
 func (d *bookmarkDecoder) decodeString() (string, error) {
@@ -167,7 +198,7 @@ func (d *bookmarkDecoder) decodeString() (string, error) {
 	d.read(&typeMask)
 	dType := typeMask & bmk_data_type_mask
 	if dType != bmk_string {
-		return "", fmt.Errorf("unexpected string type, expected %d got %d", bmk_string, dType)
+		return "", fmt.Errorf("unexpected string type, expected %d got %d", bmk_string, typeMask)
 	}
 	strB := make([]byte, len)
 	d.read(&strB)
@@ -181,7 +212,7 @@ func (d *bookmarkDecoder) decodeBytes() ([]byte, error) {
 	d.read(&typeMask)
 	dType := typeMask & bmk_data_type_mask
 	if dType != bmk_data {
-		return nil, fmt.Errorf("unexpected byte type, expected %d got %d", bmk_data, dType)
+		return nil, fmt.Errorf("unexpected byte type, expected %d got %d", bmk_data, typeMask)
 	}
 	data := make([]byte, len)
 	d.read(&data)
@@ -195,7 +226,7 @@ func (d *bookmarkDecoder) decodeTime() (time.Time, error) {
 	d.read(&typeMask)
 	dType := typeMask & bmk_data_type_mask
 	if dType != bmk_date {
-		return time.Time{}, fmt.Errorf("unexpected date type, expected %d got %d", bmk_date, dType)
+		return time.Time{}, fmt.Errorf("unexpected date type, expected %d got %d", bmk_date, typeMask)
 	}
 	var secs float64
 	d.readBE(&secs)

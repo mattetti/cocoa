@@ -115,7 +115,11 @@ func Alias(src, dst string) error {
 			VolName:      strings.Replace(volPath, "/Volumes/", "", 1),
 			CreationTime: &darwin.TimeSpec{},
 		}
-		if st, err := os.Stat(volPath); err != nil {
+		tmpAttrs, err := darwin.GetAttrList(volPath,
+			darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_ALL_ATTRS},
+			buf, 0)
+		fmt.Printf("%#v - %v\n", tmpAttrs, err)
+		if st, err := os.Stat(volPath); err == nil {
 			volumeAttrs.VolSize = st.Size()
 		}
 	}
@@ -199,12 +203,19 @@ func Alias(src, dst string) error {
 	relPath, _ := filepath.Rel("/", srcPath)
 	buf = make([]byte, 256)
 	subPath := srcPath
+	// get the attribute to the file
 	subPathAttrs, err := darwin.GetAttrList(subPath, darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
 	}
 	bookmark.CNIDPath = []uint32{subPathAttrs.FileID}
-	bookmark.Path = []string{filepath.Base(subPath)}
+	// get the aribute of the containing folder
+	subPathAttrs, err = darwin.GetAttrList(filepath.Dir(subPath), darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
+	}
+	bookmark.CNIDPath = append(bookmark.CNIDPath, subPathAttrs.FileID)
+	bookmark.Path = []string{filepath.Base(filepath.Dir(subPath)), filepath.Base(subPath)}
 
 	// walk the path and extract the file id of each sub path
 	dir := filepath.Dir(relPath)
@@ -259,10 +270,10 @@ func encodedStringItem(str string) []byte {
 	binary.LittleEndian.PutUint32(buf, uint32(len(str)))
 	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_string|bmk_st_one))
 	buf = append(buf, []byte(str)...)
-	offset := len(buf)
-	if diff := offset & 3; diff > 0 {
-		buf = append(buf, make([]byte, 4-diff)...)
-	}
+	// offset := len(buf)
+	// if diff := offset & 3; diff > 0 {
+	// 	buf = append(buf, make([]byte, 4-diff)...)
+	// }
 	return buf
 }
 

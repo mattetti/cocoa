@@ -68,7 +68,7 @@ const (
 	KBookmarkCreationOptions  = 0xd010
 	KBookmarkURLLengths       = 0xe003 // See below
 	KBookmarkFullFileName     = 0xf017
-	//                           = 0xf022
+	//                           = 0xf022 -> 0x201 type
 	KBookmarkSecurityExtension = 0xf080
 	//                           = 0xf081
 )

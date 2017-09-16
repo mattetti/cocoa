@@ -89,7 +89,9 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 	}
 
 	if mask.CommonAttr&ATTR_CMN_DEVID > 0 {
-		fmt.Println("ATTR_CMN_DEVID not supported yet", pos())
+		if err = binary.Read(r, binary.LittleEndian, &results.DevID); err != nil {
+			return results, fmt.Errorf("failed to read the cmd devid - %s", err)
+		}
 	}
 
 	if mask.CommonAttr&ATTR_CMN_FSID > 0 {
@@ -176,7 +178,9 @@ func GetAttrList(path string, mask AttrListMask, attrBuf []byte, options uint32)
 		fmt.Println("ATTR_CMN_EXTENDED_SECURITY not supported yet", pos())
 	}
 	if mask.CommonAttr&ATTR_CMN_UUID > 0 {
-		fmt.Println("ATTR_CMN_UUID not supported yet", pos())
+		if err = binary.Read(r, binary.LittleEndian, &results.UUID); err != nil {
+			return results, fmt.Errorf("failed to read uuid - %s", err)
+		}
 	}
 	if mask.CommonAttr&ATTR_CMN_GRPUUID > 0 {
 		fmt.Println("ATTR_CMN_GRPUUID not supported yet", pos())
