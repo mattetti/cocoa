@@ -271,19 +271,22 @@ func (b *BookmarkData) Write(w io.Writer) error {
 }
 
 func (b *BookmarkData) prepareTypeData() {
-	typeBuf := &bytes.Buffer{}
-	typeBuf.Write([]byte{
+	buf := &bytes.Buffer{}
+	buf.Write([]byte{
 		0x64, 0x6E, 0x69, 0x62, 0x00, 0x00, 0x00, 0x00,
 		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	buf.Write(make([]byte, 12))
 	// file extension
-	ext := filepath.Ext(b.Filename)
+	ext := filepath.Ext(b.TargetPath())
 	if strings.HasPrefix(ext, ".") {
 		ext = ext[1:]
 	}
-	binary.Write(typeBuf, binary.LittleEndian, uint32(len(ext)))
-	typeBuf.Write(make([]byte, 8-len(ext)))
-	typeBuf.Write(make([]byte, 8))
-	b.TypeData = typeBuf.Bytes()
+	fmt.Println(ext)
+	binary.Write(buf, binary.LittleEndian, uint32(len(ext)))
+	buf.Write(make([]byte, 4))
+	buf.Write([]byte(ext))
+	buf.Write(make([]byte, 12))
+	b.TypeData = buf.Bytes()
 }
 
 func (b *BookmarkData) String() string {
