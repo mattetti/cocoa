@@ -2,6 +2,7 @@ package darwin
 
 const (
 	// Resource property flags (from CFURLPriv.h)
+	// https://opensource.apple.com/source/CF/CF-635/CFURLPriv.h.auto.html
 	KCFURLResourceIsRegularFile      = 0x00000001
 	KCFURLResourceIsDirectory        = 0x00000002
 	KCFURLResourceIsSymbolicLink     = 0x00000004

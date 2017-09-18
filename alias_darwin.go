@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -115,10 +117,6 @@ func Alias(src, dst string) error {
 			VolName:      strings.Replace(volPath, "/Volumes/", "", 1),
 			CreationTime: &darwin.TimeSpec{},
 		}
-		tmpAttrs, err := darwin.GetAttrList(volPath,
-			darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_ALL_ATTRS},
-			buf, 0)
-		fmt.Printf("%#v - %v\n", tmpAttrs, err)
 		if st, err := os.Stat(volPath); err == nil {
 			volumeAttrs.VolSize = st.Size()
 		}
@@ -150,6 +148,12 @@ func Alias(src, dst string) error {
 	}
 	defer w.Close()
 
+	goStat, err := os.Stat(srcPath)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve file id for %s - %s", srcPath, err)
+	}
+	fileStat := goStat.Sys().(*syscall.Stat_t)
+
 	bookmark := &BookmarkData{
 		FileSystemType:     fileSystemType,
 		FileCreationDate:   fileAttrs.CreationTime.Time(),
@@ -164,57 +168,68 @@ func Alias(src, dst string) error {
 		CreationOptions:    512,
 		WasFileReference:   true,
 		UserName:           "unknown",
-		CNID:               uint32(fileAttrs.FileID),
-		UID:                99,
+		// CNID:               uint32(fileAttrs.FileID),
+		UID: fileStat.Uid,
+	}
+	if fileStat.Uid > 0 {
+		u, err := user.LookupId(strconv.Itoa(int(fileStat.Uid)))
+		if err == nil {
+			bookmark.UserName = u.Username
+		}
 	}
 
 	// volume properties
 	bb := &bytes.Buffer{}
-	if bookmark.VolumeIsRoot {
-		binary.Write(bb, binary.LittleEndian, uint64(0x81|darwin.KCFURLVolumeSupportsPersistentIDs))
-		binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
-	} else {
-		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLVolumeIsLocal|darwin.KCFURLVolumeIsExternal))
-		binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
-	}
-	binary.Write(bb, binary.LittleEndian, uint64(0))
+	// if bookmark.VolumeIsRoot {
+	// 0x81, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0,
+	binary.Write(bb, binary.LittleEndian, uint64(0x81|darwin.KCFURLVolumeSupportsPersistentIDs))
+	// 0xef, 0x13, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0,
+	binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
+	// } else {
+	// 	binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLVolumeIsLocal|darwin.KCFURLVolumeIsExternal))
+	// 	binary.Write(bb, binary.LittleEndian, uint64(0x13ef|darwin.KCFURLVolumeSupportsPersistentIDs))
+	// }
+	bb.Write([]byte{0xef, 0x13, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0})
+	// binary.Write(bb, binary.LittleEndian, uint64(0))
 	bookmark.VolumeProperties = bb.Bytes()
 
 	// file properties
-	bb.Reset()
+	bb2 := &bytes.Buffer{}
 	switch fileAttrs.ObjType {
 	// file
 	case darwin.VREG:
-		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
+		binary.Write(bb2, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
 		// folder
 	case darwin.VDIR:
-		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsDirectory))
+		binary.Write(bb2, binary.LittleEndian, uint64(darwin.KCFURLResourceIsDirectory))
 		// symlink
 	case darwin.VLNK:
-		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsSymbolicLink))
+		binary.Write(bb2, binary.LittleEndian, uint64(darwin.KCFURLResourceIsSymbolicLink))
 	default:
-		binary.Write(bb, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
+		binary.Write(bb2, binary.LittleEndian, uint64(darwin.KCFURLResourceIsRegularFile))
 	}
-	binary.Write(bb, binary.LittleEndian, uint64(0x0f))
-	binary.Write(bb, binary.LittleEndian, uint64(0))
-	bookmark.FileProperties = bb.Bytes()
+	bb2.Write([]byte{0x1f, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0})
+	bb2.Write([]byte{0x1f, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0})
+	// binary.Write(bb, binary.LittleEndian, uint64(0x0f))
+	// binary.Write(bb, binary.LittleEndian, uint64(0))
+	bookmark.FileProperties = bb2.Bytes()
 
 	// getting data about each node of the path
 	relPath, _ := filepath.Rel("/", srcPath)
-	buf = make([]byte, 256)
+	// buf = make([]byte, 256)
 	subPath := srcPath
-	// get the attribute to the file
-	subPathAttrs, err := darwin.GetAttrList(subPath, darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
+
+	// collecting the CNIDs of the entire path
+	bookmark.CNIDPath = []uint64{fileStat.Ino}
+
+	// get the file ID of the containing folder
+	goStat, err = os.Stat(filepath.Dir(subPath))
 	if err != nil {
-		return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
+		return fmt.Errorf("failed to retrieve file id for %s - %s", filepath.Dir(subPath), err)
 	}
-	bookmark.CNIDPath = []uint32{subPathAttrs.FileID}
-	// get the aribute of the containing folder
-	subPathAttrs, err = darwin.GetAttrList(filepath.Dir(subPath), darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
-	}
-	bookmark.CNIDPath = append(bookmark.CNIDPath, subPathAttrs.FileID)
+	fileStat = goStat.Sys().(*syscall.Stat_t)
+	bookmark.CNIDPath = append([]uint64{fileStat.Ino}, bookmark.CNIDPath...)
+
 	bookmark.Path = []string{filepath.Base(filepath.Dir(subPath)), filepath.Base(subPath)}
 
 	// walk the path and extract the file id of each sub path
@@ -226,13 +241,13 @@ func Alias(src, dst string) error {
 		}
 
 		bookmark.Path = append([]string{filepath.Base(dir)}, bookmark.Path...)
-		buf = make([]byte, 256)
 		subPath = filepath.Join("/", dir)
-		subPathAttrs, err = darwin.GetAttrList(subPath, darwin.AttrListMask{CommonAttr: darwin.ATTR_CMN_FILEID}, buf, 0)
+		goStat, err := os.Stat(subPath)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve file id for %s - %s", subPath, err)
 		}
-		bookmark.CNIDPath = append([]uint32{subPathAttrs.FileID}, bookmark.CNIDPath...)
+		fileStat := goStat.Sys().(*syscall.Stat_t)
+		bookmark.CNIDPath = append([]uint64{fileStat.Ino}, bookmark.CNIDPath...)
 	}
 
 	bookmark.ContainingFolderIDX = uint32(len(bookmark.Path)) - 2
@@ -270,10 +285,10 @@ func encodedStringItem(str string) []byte {
 	binary.LittleEndian.PutUint32(buf, uint32(len(str)))
 	binary.LittleEndian.PutUint32(buf[4:], uint32(bmk_string|bmk_st_one))
 	buf = append(buf, []byte(str)...)
-	// offset := len(buf)
-	// if diff := offset & 3; diff > 0 {
-	// 	buf = append(buf, make([]byte, 4-diff)...)
-	// }
+	offset := len(buf)
+	if diff := offset & 3; diff > 0 {
+		buf = append(buf, make([]byte, 4-diff)...)
+	}
 	return buf
 }
 

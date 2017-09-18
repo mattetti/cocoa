@@ -61,14 +61,14 @@ const (
 	KBookmarkVolumeBookmark     = 0x2040 // Embedded bookmark for disk image (TOC id)
 	KBookmarkVolumeMountPoint   = 0x2050 // A URL
 	//                           = 0x2070
-	KBookmarkContainingFolder = 0xc001 // Index of containing folder in path
-	KBookmarkUserName         = 0xc011 // User that created bookmark
-	KBookmarkUID              = 0xc012 // UID that created bookmark
-	KBookmarkWasFileReference = 0xd001 // True if the URL was a file reference
-	KBookmarkCreationOptions  = 0xd010
-	KBookmarkURLLengths       = 0xe003 // See below
-	KBookmarkFullFileName     = 0xf017
-	//                           = 0xf022 -> 0x201 type
+	KBookmarkContainingFolder  = 0xc001 // Index of containing folder in path
+	KBookmarkUserName          = 0xc011 // User that created bookmark
+	KBookmarkUID               = 0xc012 // UID that created bookmark
+	KBookmarkWasFileReference  = 0xd001 // True if the URL was a file reference
+	KBookmarkCreationOptions   = 0xd010
+	KBookmarkURLLengths        = 0xe003 // See below
+	KBookmarkFullFileName      = 0xf017
+	KBookmarkFileType          = 0xf022 // -> 0x201 looks like some file reference with file extension
 	KBookmarkSecurityExtension = 0xf080
 	//                           = 0xf081
 )

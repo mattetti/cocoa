@@ -7,16 +7,19 @@ import (
 	"io"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
 // BookmarkData represents the data structure holding the bookmark information
 type BookmarkData struct {
-	FileSystemType      string
-	Path                []string
-	CNIDPath            []uint32
+	FileSystemType string
+	Path           []string
+	// CNIDPath in the case of an alias file is the offset to the path element (minus header size)
+	CNIDPath            []uint64
 	FileCreationDate    time.Time
 	FileProperties      []byte
+	TypeData            []byte // from 0xf022
 	ContainingFolderIDX uint32
 	VolumePath          string
 	VolumeIsRoot        bool
@@ -63,6 +66,7 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	pathOffsets := make([]int, len(b.Path))
 	for i, item := range b.Path {
 		// track the starting offset of each item (append 4 for the body size value)
+		// since we need those to create an array for the TOC
 		pathOffsets[i] = 4 + buf.Len()
 		// get the offset of the last item in the path
 		if i == len(b.Path)-1 {
@@ -86,22 +90,28 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	}
 	padBuf(buf)
 
-	// file ids for the path
+	// each file ids for the path
+	cnidOffsets := make([]int, len(b.Path))
+	for i, cnid := range b.CNIDPath {
+		cnidOffsets[i] = 4 + buf.Len()
+		buf.Write(encodedUint64(cnid))
+	}
+
 	// 0x05 0x10
 	oMap[KBookmarkCNIDPath] = buf.Len()
 	binary.Write(buf, binary.LittleEndian, uint32(len(b.CNIDPath)*4))
 	binary.Write(buf, binary.LittleEndian, uint32(bmk_array|bmk_st_one))
-	for _, cnid := range b.CNIDPath {
-		binary.Write(buf, binary.LittleEndian, uint32(cnid))
+	for _, offset := range cnidOffsets {
+		binary.Write(buf, binary.LittleEndian, uint32(offset))
 	}
 	padBuf(buf)
 
 	// file ID 0x30 0x10
-	if b.VolumeIsRoot {
-		oMap[KBookmarkFileID] = buf.Len()
-		buf.Write(encodedUint32(b.CNID))
-		padBuf(buf)
-	}
+	// if b.VolumeIsRoot {
+	// 	oMap[KBookmarkFileID] = buf.Len()
+	// 	buf.Write(encodedUint32(b.CNID))
+	// 	padBuf(buf)
+	// }
 
 	// file properties
 	// 0x10 0x10
@@ -222,7 +232,11 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	buf.Write(encodedBool(b.WasFileReference))
 	padBuf(buf)
 
-	// 0xf022
+	// 0xf022 byte array 0x201
+	oMap[KBookmarkFileType] = buf.Len()
+	b.prepareTypeData()
+	buf.Write(encodedBytes(b.TypeData))
+	padBuf(buf)
 
 	// buffer the header now that we have enough data
 	hbuf := bytes.NewBufferString("book")
@@ -254,6 +268,22 @@ func (b *BookmarkData) Write(w io.Writer) error {
 
 	_, err := w.Write(hbuf.Bytes())
 	return err
+}
+
+func (b *BookmarkData) prepareTypeData() {
+	typeBuf := &bytes.Buffer{}
+	typeBuf.Write([]byte{
+		0x64, 0x6E, 0x69, 0x62, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	// file extension
+	ext := filepath.Ext(b.Filename)
+	if strings.HasPrefix(ext, ".") {
+		ext = ext[1:]
+	}
+	binary.Write(typeBuf, binary.LittleEndian, uint32(len(ext)))
+	typeBuf.Write(make([]byte, 8-len(ext)))
+	typeBuf.Write(make([]byte, 8))
+	b.TypeData = typeBuf.Bytes()
 }
 
 func (b *BookmarkData) String() string {

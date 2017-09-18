@@ -43,11 +43,22 @@ func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 				fmt.Println("Parsing CNID path at offset", offset)
 			}
 			d.seek(int64(offset), io.SeekStart)
-			d.b.CNIDPath, err = d.decodeUint32Slice()
+			offsets, err := d.decodeUint32Slice()
 			if err != nil {
-				d.err = fmt.Errorf("failed to decode the CNID path - %s", err)
+				d.err = fmt.Errorf("failed to decode the CNID path offsets - %s", err)
 				return d.b, d.err
 			}
+			d.b.CNIDPath = make([]uint64, len(offsets))
+			var inode int64
+			for i, offset := range offsets {
+				d.seek(int64(d.headerSize+offset), io.SeekStart)
+				inode, err = d.decodeInt64()
+				if err != nil {
+					return d.b, fmt.Errorf("failed to read the %d CNID path in array - %v", i, err)
+				}
+				d.b.CNIDPath[i] = uint64(inode)
+			}
+
 		case KBookmarkVolumeProperties:
 			if Debug {
 				fmt.Println("Parsing volume properties at offset", offset)

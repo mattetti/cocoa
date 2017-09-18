@@ -12,6 +12,7 @@ var (
 	flagSrc   = flag.String("from", "", "Path of the file to link from")
 	flagDest  = flag.String("to", "", "Path of the file to link to")
 	flagParse = flag.String("parse", "", "debugging option")
+	flagDebug = flag.Bool("debug", false, "print more logs ")
 )
 
 func main() {
@@ -27,6 +28,9 @@ func main() {
 	if *flagDest == "" {
 		fmt.Println("You have to define the destination path, where you want to save the bookmark: -dst=<dst>")
 		os.Exit(1)
+	}
+	if *flagDebug {
+		cocoa.Debug = true
 	}
 
 	if cocoa.IsAlias(*flagSrc) {
