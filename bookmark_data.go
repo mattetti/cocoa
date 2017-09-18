@@ -106,6 +106,11 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	}
 	padBuf(buf)
 
+	// KBookmarkFileCreationDate 0x04 0x10
+	oMap[KBookmarkFileCreationDate] = buf.Len()
+	buf.Write(encodedTime(b.FileCreationDate))
+	padBuf(buf)
+
 	// file ID 0x30 0x10
 	// if b.VolumeIsRoot {
 	// 	oMap[KBookmarkFileID] = buf.Len()
@@ -119,9 +124,9 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	buf.Write(encodedBytes(b.FileProperties))
 	padBuf(buf)
 
-	// KBookmarkFileCreationDate 0x04 0x10
-	oMap[KBookmarkFileCreationDate] = buf.Len()
-	buf.Write(encodedTime(b.FileCreationDate))
+	// KBookmarkWasFileReference 0x01 0xD0
+	oMap[KBookmarkWasFileReference] = buf.Len()
+	buf.Write(encodedBool(b.WasFileReference))
 	padBuf(buf)
 
 	// 0x54 0x10 unknown but seems to always be 1
@@ -130,6 +135,14 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	oMap[KBookmarkUnknown1] = buf.Len()
 	buf.Write(encodedUint32(uint32(1)))
 	padBuf(buf)
+
+	// KBookmarkContainingFolder 0x01 0xc0
+	// TODO: only for root volumes?
+	if b.VolumeIsRoot {
+		oMap[KBookmarkContainingFolder] = buf.Len()
+		buf.Write(encodedUint64(uint64(b.ContainingFolderIDX)))
+		padBuf(buf)
+	}
 
 	// 0x56 0x10 bool set to true
 	oMap[KBookmarkUnknown2] = buf.Len()
@@ -205,14 +218,6 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		padBuf(buf)
 	}
 
-	// KBookmarkContainingFolder 0x01 0xc0
-	// TODO: only for root volumes?
-	if b.VolumeIsRoot {
-		oMap[KBookmarkContainingFolder] = buf.Len()
-		buf.Write(encodedUint32(b.ContainingFolderIDX))
-		padBuf(buf)
-	}
-
 	// KBookmarkUserName 0x11 0xc0
 	if b.VolumeIsRoot {
 		oMap[KBookmarkUserName] = buf.Len()
@@ -226,11 +231,6 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		buf.Write(encodedUint32(b.UID))
 		padBuf(buf)
 	}
-
-	// KBookmarkWasFileReference 0x01 0xD0
-	oMap[KBookmarkWasFileReference] = buf.Len()
-	buf.Write(encodedBool(b.WasFileReference))
-	padBuf(buf)
 
 	// 0xf022 byte array 0x201
 	oMap[KBookmarkFileType] = buf.Len()
@@ -281,7 +281,6 @@ func (b *BookmarkData) prepareTypeData() {
 	if strings.HasPrefix(ext, ".") {
 		ext = ext[1:]
 	}
-	fmt.Println(ext)
 	binary.Write(buf, binary.LittleEndian, uint32(len(ext)))
 	buf.Write(make([]byte, 4))
 	buf.Write([]byte(ext))
