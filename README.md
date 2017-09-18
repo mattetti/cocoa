@@ -19,5 +19,18 @@ if err := cocoa.Alias("source/path", "destination/path"); err != nil {
 }
 ```
 
+Similar to the following Swift code:
+
+```swift
+import Foundation
+
+var originalUrl = NSURL.fileURL(withPath: "source/path")
+var aliasUrl = NSURL.fileURL(withPath: "destination/path")
+var bookmarkData = try? originalUrl.bookmarkData(options: NSURL.BookmarkCreationOptions.suitableForBookmarkFile,
+                                                 includingResourceValuesForKeys: nil, relativeTo: nil)
+// URLBookmarkCreationSuitableForBookmarkFile
+try? URL.writeBookmarkData(bookmarkData!, to: aliasUrl)
+```
+
 
 Check [GoDoc](https://godoc.org/github.com/mattetti/cocoa) for more information.
