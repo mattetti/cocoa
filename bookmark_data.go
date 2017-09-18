@@ -62,12 +62,20 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		buf.Write([]byte{0x48, 0x0, 0x0, 0x0})
 	}
 
+	var usernameOffset int
+	var trueOffset int
+
 	// write each path items one by one
 	pathOffsets := make([]int, len(b.Path))
 	for i, item := range b.Path {
 		// track the starting offset of each item (append 4 for the body size value)
 		// since we need those to create an array for the TOC
 		pathOffsets[i] = 4 + buf.Len()
+		// if part of the path matches the username, let's use that offset for the
+		// username record.
+		if item == b.UserName {
+			usernameOffset = buf.Len()
+		}
 		// get the offset of the last item in the path
 		if i == len(b.Path)-1 {
 			oMap[KBookmarkFullFileName] = pathOffsets[i] - 4
@@ -125,16 +133,19 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	padBuf(buf)
 
 	// KBookmarkWasFileReference 0x01 0xD0
-	oMap[KBookmarkWasFileReference] = buf.Len()
-	buf.Write(encodedBool(b.WasFileReference))
-	padBuf(buf)
+	// oMap[KBookmarkWasFileReference] = buf.Len()
+	// buf.Write(encodedBool(b.WasFileReference))
+	// padBuf(buf)
+	// if b.WasFileReference {
+	// 	trueOffset = oMap[KBookmarkWasFileReference]
+	// }
 
 	// 0x54 0x10 unknown but seems to always be 1
 	// 0x55 0x10 unknown, point to the same value
-	oMap[KBookmarkUnknown] = buf.Len()
-	oMap[KBookmarkUnknown1] = buf.Len()
-	buf.Write(encodedUint32(uint32(1)))
-	padBuf(buf)
+	// oMap[KBookmarkUnknown] = buf.Len()
+	// oMap[KBookmarkUnknown1] = buf.Len()
+	// buf.Write(encodedUint32(uint32(1)))
+	// padBuf(buf)
 
 	// KBookmarkContainingFolder 0x01 0xc0
 	// TODO: only for root volumes?
@@ -144,10 +155,64 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		padBuf(buf)
 	}
 
-	// 0x56 0x10 bool set to true
-	oMap[KBookmarkUnknown2] = buf.Len()
-	buf.Write(encodedBool(true))
+	// KBookmarkUID 0x12 0xc0
+	if b.VolumeIsRoot {
+		oMap[KBookmarkUID] = buf.Len()
+		buf.Write(encodedUint32(b.UID))
+		padBuf(buf)
+	}
+
+	// KBookmarkVolumeURL 0x05 0x20
+	oMap[KBookmarkVolumeURL] = buf.Len()
+	binary.Write(buf, binary.LittleEndian, uint32(len(b.VolumeURL)))
+	// only support absolute path for now
+	binary.Write(buf, binary.LittleEndian, uint32(bmk_url|bmk_url_st_absolute))
+	buf.Write([]byte(b.VolumeURL))
 	padBuf(buf)
+
+	// KBookmarkVolumeName 0x10 0x20
+	oMap[KBookmarkVolumeName] = buf.Len()
+	buf.Write(encodedStringItem(b.VolumeName))
+	padBuf(buf)
+
+	// KBookmarkVolumeSize 0x12 0x20
+	oMap[KBookmarkVolumeSize] = buf.Len()
+	buf.Write(encodedUint64(uint64(b.VolumeSize)))
+	padBuf(buf)
+
+	// KBookmarkVolumeCreationDate 0x13 0x20
+	oMap[KBookmarkVolumeCreationDate] = buf.Len()
+	buf.Write(encodedTime(b.VolumeCreationDate))
+	padBuf(buf)
+
+	// KBookmarkVolumeUUID 0x11 0x20
+	oMap[KBookmarkVolumeUUID] = buf.Len()
+	buf.Write(encodedStringItem(b.VolumeUUID))
+	padBuf(buf)
+
+	// KBookmarkVolumeProperties 0x20 0x20
+	oMap[KBookmarkVolumeProperties] = buf.Len()
+	buf.Write(encodedBytes(b.VolumeProperties))
+	padBuf(buf)
+
+	// KBookmarkVolumePath 0x02 0x20
+	oMap[KBookmarkVolumePath] = buf.Len()
+	buf.Write(encodedStringItem(b.VolumePath))
+	padBuf(buf)
+
+	// KBookmarkFileType 0xf022
+	oMap[KBookmarkFileType] = buf.Len()
+	b.prepareTypeData()
+	buf.Write(encodedBytes(b.TypeData))
+	padBuf(buf)
+
+	// 0x56 0x10 bool set to true
+	// oMap[KBookmarkUnknown2] = trueOffset
+	// if trueOffset < 1 {
+	// 	oMap[KBookmarkUnknown2] = buf.Len()
+	// 	buf.Write(encodedBool(true))
+	// 	padBuf(buf)
+	// }
 
 	// KBookmarkTOCPath
 	if !b.VolumeIsRoot {
@@ -173,70 +238,27 @@ func (b *BookmarkData) Write(w io.Writer) error {
 		padBuf(buf)
 	}
 
-	// KBookmarkVolumePath 0x02 0x20
-	oMap[KBookmarkVolumePath] = buf.Len()
-	buf.Write(encodedStringItem(b.VolumePath))
-	padBuf(buf)
-
-	// KBookmarkVolumeURL 0x05 0x20
-	oMap[KBookmarkVolumeURL] = buf.Len()
-	binary.Write(buf, binary.LittleEndian, uint32(len(b.VolumeURL)))
-	// only support absolute path for now
-	binary.Write(buf, binary.LittleEndian, uint32(bmk_url|bmk_url_st_absolute))
-	buf.Write([]byte(b.VolumeURL))
-	padBuf(buf)
-
-	// KBookmarkVolumeName 0x10 0x20
-	oMap[KBookmarkVolumeName] = buf.Len()
-	buf.Write(encodedStringItem(b.VolumeName))
-	padBuf(buf)
-
-	// KBookmarkVolumeUUID 0x11 0x20
-	oMap[KBookmarkVolumeUUID] = buf.Len()
-	buf.Write(encodedStringItem(b.VolumeUUID))
-	padBuf(buf)
-
-	// KBookmarkVolumeSize 0x12 0x20
-	oMap[KBookmarkVolumeSize] = buf.Len()
-	buf.Write(encodedUint64(uint64(b.VolumeSize)))
-	padBuf(buf)
-
-	// KBookmarkVolumeCreationDate 0x13 0x20
-	oMap[KBookmarkVolumeCreationDate] = buf.Len()
-	buf.Write(encodedTime(b.VolumeCreationDate))
-	padBuf(buf)
-
-	// KBookmarkVolumeProperties 0x20 0x20
-	oMap[KBookmarkVolumeProperties] = buf.Len()
-	buf.Write(encodedBytes(b.VolumeProperties))
-	padBuf(buf)
-
 	// KBookmarkVolumeIsRoot 0x30 0x20
 	if b.VolumeIsRoot {
-		oMap[KBookmarkVolumeIsRoot] = buf.Len()
-		buf.Write(encodedBool(b.VolumeIsRoot))
-		padBuf(buf)
+		if b.VolumeIsRoot && trueOffset > 0 {
+			oMap[KBookmarkVolumeIsRoot] = trueOffset
+		} else {
+			oMap[KBookmarkVolumeIsRoot] = buf.Len()
+			buf.Write(encodedBool(b.VolumeIsRoot))
+			padBuf(buf)
+		}
 	}
 
 	// KBookmarkUserName 0x11 0xc0
 	if b.VolumeIsRoot {
-		oMap[KBookmarkUserName] = buf.Len()
-		buf.Write(encodedStringItem(b.UserName))
-		padBuf(buf)
+		if usernameOffset > 0 {
+			oMap[KBookmarkUserName] = usernameOffset
+		} else {
+			oMap[KBookmarkUserName] = buf.Len()
+			buf.Write(encodedStringItem(b.UserName))
+			padBuf(buf)
+		}
 	}
-
-	// KBookmarkUID 0x12 0xc0
-	if b.VolumeIsRoot {
-		oMap[KBookmarkUID] = buf.Len()
-		buf.Write(encodedUint32(b.UID))
-		padBuf(buf)
-	}
-
-	// 0xf022 byte array 0x201
-	oMap[KBookmarkFileType] = buf.Len()
-	b.prepareTypeData()
-	buf.Write(encodedBytes(b.TypeData))
-	padBuf(buf)
 
 	// buffer the header now that we have enough data
 	hbuf := bytes.NewBufferString("book")
@@ -255,8 +277,10 @@ func (b *BookmarkData) Write(w io.Writer) error {
 	binary.Write(hbuf, binary.LittleEndian, 4+uint32(buf.Len()+len(toc)))
 	// magic
 	hbuf.Write([]byte{0x00, 0x00, 0x04, 0x10, 0x0, 0x0, 0x0, 0x0})
-	// TODO: figure out those byte since they seem to set the icon
-	hbuf.Write(make([]byte, 20))
+	// TODO: figure out those byte
+	// 0x72, 0x73, 0x2F, 0x6D | 8 bytes that change
+	hbuf.Write(make([]byte, 16))
+	hbuf.Write([]byte{0x63, 0x65, 0x2F, 0x73})
 	// end of header
 
 	// offset to the TOC  (size of the body)
@@ -284,7 +308,8 @@ func (b *BookmarkData) prepareTypeData() {
 	binary.Write(buf, binary.LittleEndian, uint32(len(ext)))
 	buf.Write(make([]byte, 4))
 	buf.Write([]byte(ext))
-	buf.Write(make([]byte, 12))
+	buf.Write([]byte{0x3f, 0x3f, 0x3f, 0x3f, 0x1})
+	buf.Write(make([]byte, 7))
 	b.TypeData = buf.Bytes()
 }
 
