@@ -1,7 +1,9 @@
 package darwin
 
+import "errors"
+
 var (
-	notDarwin = error.New("Only implemented on Darwin")
+	notDarwin = errors.New("Only implemented on Darwin")
 )
 
 // SetAsAlias flags the destination file as an alias.

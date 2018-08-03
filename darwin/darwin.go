@@ -133,7 +133,7 @@ func (ts TimeSpec) String() string {
 
 // Time returns a unix time representation of the time spec
 func (ts TimeSpec) Time() time.Time {
-	return time.Unix(ts.Sec, ts.Nsec)
+	return time.Unix(int64(ts.Sec), int64(ts.Nsec))
 }
 
 func (ts TimeSpec) DarwinDuration() time.Duration {

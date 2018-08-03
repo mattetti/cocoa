@@ -21,3 +21,7 @@ func Alias(src, dst string) error { return errors.New("Only implemented on Darwi
 func AliasFromReader(r io.Reader) (*BookmarkData, error) {
 	return nil, errors.New("Only implemented on Darwin")
 }
+
+func NewAliasRecord(path string) (*AliasRecord, error) {
+	return nil, errors.New("Only implemented on Darwin")
+}

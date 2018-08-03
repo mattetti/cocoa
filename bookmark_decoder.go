@@ -165,12 +165,13 @@ func (d *bookmarkDecoder) decodeInt64() (int64, error) {
 	var typeMask uint32
 	d.read(&len)
 	d.read(&typeMask)
-	dType := typeMask & bmk_data_type_mask
+	// Skipping verification
+	// dType := typeMask & bmk_data_type_mask
 	// dSubType := typeMask & bmk_data_subtype_mask
 
-	if dType != bmk_number {
-		return 0, fmt.Errorf("unexpected number type, expected %d got %d", bmk_number, typeMask)
-	}
+	// if dType != bmk_number {
+	// 	return 0, fmt.Errorf("unexpected number type, expected %d got %d", bmk_number, typeMask)
+	// }
 	var n int64
 	d.read(&n)
 	return n, d.err
